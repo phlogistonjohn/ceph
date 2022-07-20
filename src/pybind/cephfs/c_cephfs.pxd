@@ -20,6 +20,13 @@ cdef extern from "cephfs/ceph_ll_client.h":
         timespec    stx_btime
         uint64_t    stx_version
 
+cdef extern from "cephfs/ceph_ll_client.h" nogil:
+    enum:
+        _AT_STATX_SYNC_TYPE "AT_STATX_SYNC_TYPE"
+        _AT_STATX_SYNC_AS_STAT "AT_STATX_SYNC_AS_STAT"
+        _AT_STATX_FORCE_SYNC "AT_STATX_FORCE_SYNC"
+        _AT_STATX_DONT_SYNC "AT_STATX_DONT_SYNC"
+
 cdef extern from "cephfs/libcephfs.h" nogil:
     cdef struct ceph_mount_info:
         pass
