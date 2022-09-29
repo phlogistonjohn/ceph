@@ -8,13 +8,21 @@ ARG JENKINS_USER_ID=1110
 ARG JENKINS_USER_GID=100
 
 
-SHELL ["bash", "-x", "-c"]
+#SHELL ["bash", "-x", "-c"]
+RUN useradd --uid ${JENKINS_USER_ID} --gid ${JENKINS_USER_GID} --create-home ${JENKINS_USER}
 
 COPY ./ ./
-ARG FOR_MAKE_CHECK=1
-RUN source run-make-check.sh && prepare
-RUN dnf clean all && rm -rf /var/cache/dnf/*
+ENV FOR_MAKE_CHECK=1
+ARG CLEAN_DNF=yes
+RUN true \
+    && dnf install -y epel-release 'dnf-command(config-manager)'  \
+    && dnf config-manager --set-enabled epel \
+    && dnf install -y gcc-toolset-1{,-libatomic-devel} \
+    && dnf install -y java-1.8.0-openjdk-headless \
+    && source ./run-make-check.sh \
+    && prepare \
+    && ( if [ "${CLEAN_DNF}" != no ]; then dnf clean all && rm -rf /var/cache/dnf/* ; fi ) \
+    && true
 
-RUN useradd --uid ${JENKINS_USER_ID} --gid ${JENKINS_USER_GID} --create-home ${JENKINS_USER}
 
 USER ${JENKINS_USER}
