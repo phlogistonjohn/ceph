@@ -395,7 +395,14 @@ else
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
-            $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
+            if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
+                # try again. ported over from run-make.sh. Not sure why this is
+                # special enough to try to install twice, but honor the spirit
+                # of the previous code.
+                $SUDO dpkg --configure -a
+                in_jenkins && echo "CI_DEBUG: trying to install $INSTALL_EXTRA_PACKAGES again"
+                $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
+            fi
         fi
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
