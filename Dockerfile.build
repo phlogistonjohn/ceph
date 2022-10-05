@@ -16,7 +16,7 @@ ENV FOR_MAKE_CHECK=1
 ARG CLEAN_DNF=yes
 RUN true \
     && dnf install -y java-1.8.0-openjdk-headless \
-    && source ./run-make-check.sh \
+    && source ./run-make.sh \
     && prepare \
     && ( if [ "${CLEAN_DNF}" != no ]; then dnf clean all && rm -rf /var/cache/dnf/* ; fi ) \
     && true
