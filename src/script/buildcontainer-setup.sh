@@ -25,6 +25,11 @@ case "${CEPH_BRANCH}~${DISTRO}" in
             rm -rf /var/cache/dnf/*
         fi
     ;;
+    *~*ubuntu*22.04)
+        apt-get update
+        source ./src/script/run-make.sh
+        prepare
+    ;;
     *)
         echo "Unknown branch or build: ${CEPH_BRANCH}~${DISTRO}" >&2
         exit 2
