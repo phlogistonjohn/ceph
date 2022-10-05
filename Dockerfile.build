@@ -15,9 +15,6 @@ COPY ./ ./
 ENV FOR_MAKE_CHECK=1
 ARG CLEAN_DNF=yes
 RUN true \
-    && dnf install -y epel-release 'dnf-command(config-manager)'  \
-    && dnf config-manager --set-enabled epel \
-    && dnf install -y gcc-toolset-1{,-libatomic-devel} \
     && dnf install -y java-1.8.0-openjdk-headless \
     && source ./run-make-check.sh \
     && prepare \
