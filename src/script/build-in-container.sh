@@ -66,6 +66,9 @@ build_ceph() {
     cmd=("${engine}" run --name ceph_build --rm)
     cmd+=("${EXTRA_ARGS[@]}")
     cmd+=(-v "$PWD:$HOMEDIR")
+    if [ -d "$HOME/.ccache" ]; then
+        cmd+=(-v "$HOME/.ccache:$HOMEDIR/.ccache")
+    fi
     cmd+=("$CONTAINER_NAME:$TAG")
 
     "${cmd[@]}" "$@"
