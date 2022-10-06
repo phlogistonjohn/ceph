@@ -164,4 +164,6 @@ build_in_container() {
     fi
 }
 
-build_in_container "$@"
+if [ "$0" = "$BASH_SOURCE" ]; then
+    build_in_container "$@"
+fi
