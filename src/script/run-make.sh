@@ -109,6 +109,14 @@ EOM
             break
         fi
     done
+    for i in 11; do
+        if [ -f "/opt/rh/gcc-toolset-$i/enable" ]; then
+            . /opt/rh/gcc-toolset-$i/enable
+            cxx_compiler="$(command -v g++)"
+            c_compiler="$(command -v gcc)"
+            break
+        fi
+    done
     local cmake_opts
     cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
     cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
