@@ -323,8 +323,9 @@ class RbdStatus(BaseController):
         status = {'available': True, 'message': None}
         if not CephService.get_pool_list('rbd'):
             status['available'] = False
-            status['message'] = 'No RBD pools in the cluster. Please create a pool '\
-                                'with the "rbd" application label.'  # type: ignore
+            msg = 'No RBD pools in the cluster. Please create a pool '\
+                  'with the "rbd" application label.'
+            status['message'] = msg  # type: ignore
         return status
 
 
