@@ -1,6 +1,12 @@
 #!/bin/bash
+#
+# Build ceph in a container, creating the container environment if necessary.
+# Use a build recipe (-r) to automatically perform a build step. Otherwise,
+# pass CLI args after -- terminator to run whatever command you want in
+# the build container.
+#
 
-set -ex
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 CEPH_ROOT="$SCRIPT_DIR/../.."
@@ -10,6 +16,7 @@ TAG=
 CONTAINER_NAME="ceph-build"
 BUILD_CTR=yes
 BUILD=yes
+BUILD_DIR=build
 HOMEDIR=/build
 DNF_CACHE=
 EXTRA_ARGS=()
@@ -17,14 +24,8 @@ BUILD_ARGS=()
 
 show_help() {
     echo "build-in-container.sh:"
-    echo "  --help                Show help"
-    echo "  --distro              Specify a distro image or short name (centos8)"
-    echo "  --tag                 Specify a container tag"
-    echo "  --name                Specify a container name (default ${CONTAINER_NAME})"
-    echo "  --dnf-cache           Enable dnf caching in given dir"
-    echo "  -e                    Extra build argument"
-    echo "  --no-build            Skip ceph build"
-    echo "  --no-container-build  Skip building build container"
+    echo "    --help                Show help"
+    grep "###:" "${0}" | grep -v sed | sed 's,.*###: ,    ,'
     echo ""
 }
 
@@ -61,13 +62,44 @@ build_container() {
     "${cmd[@]}"
 }
 
+# get_recipe extends BUILD_ARGS with commands to execute the named recipe.
+# Exits on an invalid recipe.
+get_recipe() {
+    case "$1" in
+        configure)
+            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build &&. ./src/script/run-make.sh && configure')
+        ;;
+        build)
+            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build &&. ./src/script/run-make.sh && build vstart')
+        ;;
+        build-tests)
+            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build &&. ./src/script/run-make.sh && build tests')
+        ;;
+        run-tests)
+            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build && . ./run-make-check.sh && cd $BUILD_DIR && run')
+        ;;
+        *)
+            echo "invalid recipe: $1" >&2
+            exit 2
+        ;;
+    esac
+}
+
 build_ceph() {
     engine="$(get_engine)"
     cmd=("${engine}" run --name ceph_build --rm)
+    case "$engine" in
+        *podman)
+            cmd+=("--pids-limit=-1")
+        ;;
+    esac
     cmd+=("${EXTRA_ARGS[@]}")
     cmd+=(-v "$PWD:$HOMEDIR")
+    cmd+=(-e "HOMEDIR=$HOMEDIR")
+    cmd+=(-e "BUILD_DIR=$BUILD_DIR")
     if [ -d "$HOME/.ccache" ]; then
         cmd+=(-v "$HOME/.ccache:$HOMEDIR/.ccache")
+        cmd+=(-e "CCACHE_DIR=$HOMEDIR/.ccache")
     fi
     cmd+=("$CONTAINER_NAME:$TAG")
 
@@ -75,39 +107,68 @@ build_ceph() {
 }
 
 parse_cli() {
-    CLI="$(getopt -o hd:t:e: --long help,distro:,tag:,name:,no-build,no-container-build,dnf-cache: -n "$0" -- "$@")"
+    CLI="$(getopt -o hd:t:x:b:r: --long help,distro:,tag:,name:,no-build,no-container-build,dnf-cache:,build-dir:,recipe: -n "$0" -- "$@")"
     eval set -- "${CLI}"
     while true ; do
         case "$1" in
+            ###: -d / --distro=<VALUE>
+            ###:     Specify a distro image or short name (eg. centos8)
             -d|--distro)
                 DISTRO="$2"
                 shift
                 shift
             ;;
+            ###: -t / --tag=<VALUE>
+            ###:     Specify a container tag (eg. main)
             -t|--tag)
                 TAG="$2"
                 shift
                 shift
             ;;
+            ###: --name=<VALUE>
+            ###:     Specify a container name (default: ceph-build)
             --name)
                 CONTAINER_NAME="$2"
                 shift
                 shift
             ;;
+            ###: --dnf-cache=<VALUE>
+            ###:     Enable dnf caching in given dir (build container)
             --dnf-cache)
                 DNF_CACHE="$2"
                 shift
                 shift
             ;;
-            -e)
+            ###: -b / --build-dir=<VALUE>
+            ###:     Specify (relative) build directory to use (ceph build)
+            -b|--build-dir)
+                BUILD_DIR="$2"
+                shift
+                shift
+            ;;
+            ###: -x<ARG>
+            ###:     Pass extra argument to container run command
+            -x)
                 EXTRA_ARGS+=("$2")
                 shift
                 shift
             ;;
+            ###: -r / --recipe=<VALUE>
+            ###:     Ceph build recipe to use. If not provided, the remaining
+            ###:     arguments will be executed directly as a build commmand.
+            -r|--recipe)
+                build_recipe="$2"
+                shift
+                shift
+            ;;
+            ###: --no-build
+            ###:     Skip building Ceph
             --no-build)
                 BUILD=no
                 shift
             ;;
+            ###: --no-container-build
+            ###:     Skip constructing a build container
             --no-container-build)
                 BUILD_CTR=no
                 shift
@@ -131,6 +192,7 @@ parse_cli() {
 
 build_in_container() {
     parse_cli "$@"
+    set -x
 
     case "$DISTRO" in
         ubuntu22.04)
@@ -160,6 +222,7 @@ build_in_container() {
         build_container
     fi
     if [ "$BUILD" = yes ]; then
+        get_recipe "${build_recipe}"
         build_ceph "${BUILD_ARGS[@]}"
     fi
 }
