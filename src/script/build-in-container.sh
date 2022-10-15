@@ -78,6 +78,12 @@ get_recipe() {
         run-tests)
             BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build && . ./run-make-check.sh && cd $BUILD_DIR && run')
         ;;
+        make-srpm)
+            BUILD_ARGS+=(bash -c 'cd /build && ./make-srpm.sh')
+        ;;
+        rpmbuild)
+            BUILD_ARGS+=(bash -c 'rpmbuild --rebuild -D"_topdir /build/_rpm" /build/ceph-*.src.rpm')
+        ;;
         *)
             echo "invalid recipe: $1" >&2
             exit 2
