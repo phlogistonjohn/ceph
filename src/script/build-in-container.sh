@@ -222,7 +222,9 @@ build_in_container() {
         build_container
     fi
     if [ "$BUILD" = yes ]; then
-        get_recipe "${build_recipe}"
+        if [ "${build_recipe}" ]; then
+            get_recipe "${build_recipe}"
+        fi
         build_ceph "${BUILD_ARGS[@]}"
     fi
 }
