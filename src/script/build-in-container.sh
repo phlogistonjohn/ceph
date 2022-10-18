@@ -67,13 +67,13 @@ build_container() {
 get_recipe() {
     case "$1" in
         configure)
-            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build &&. ./src/script/run-make.sh && configure')
+            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build && . ./src/script/run-make.sh && configure')
         ;;
         build)
-            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build &&. ./src/script/run-make.sh && build vstart')
+            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build && . ./src/script/run-make.sh && build vstart')
         ;;
         build-tests)
-            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build &&. ./src/script/run-make.sh && build tests')
+            BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build && . ./src/script/run-make.sh && build tests')
         ;;
         run-tests)
             BUILD_ARGS+=(bash -c '. /opt/rh/gcc-toolset-11/enable && cd /build && . ./run-make-check.sh && cd $BUILD_DIR && run')
