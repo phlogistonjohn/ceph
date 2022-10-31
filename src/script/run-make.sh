@@ -2,6 +2,13 @@
 
 set -e
 
+if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CEPH_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+    . "${CEPH_ROOT}/src/script/lib-build.sh" || exit 2
+fi
+
+
 trap clean_up_after_myself EXIT
 
 ORIGINAL_CCACHE_CONF="$HOME/.ccache/ccache.conf"
