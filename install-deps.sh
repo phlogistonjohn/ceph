@@ -75,6 +75,7 @@ function munge_debian_control {
 }
 
 function ensure_decent_gcc_on_ubuntu {
+    ci_debug "Start ensure_decent_gcc_on_ubuntu() in install-deps.sh"
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
     local old=$(gcc -dumpfullversion -dumpversion)
@@ -136,6 +137,7 @@ ENDOFKEY
 }
 
 function ensure_python3_sphinx_on_ubuntu {
+    ci_debug "Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
     local sphinx_command=/usr/bin/sphinx-build
     # python-sphinx points $sphinx_command to
     # ../share/sphinx/scripts/python2/sphinx-build when it's installed
@@ -146,6 +148,7 @@ function ensure_python3_sphinx_on_ubuntu {
 }
 
 function install_pkg_on_ubuntu {
+    ci_debug "Running install_pkg_on_ubuntu() in install-deps.sh"
     local project=$1
     shift
     local sha1=$1
@@ -159,11 +162,12 @@ function install_pkg_on_ubuntu {
     if [ $force = "force" ]; then
 	missing_pkgs="$@"
     else
-	for pkg in $pkgs; do
-	    if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
-		missing_pkgs+=" $pkg"
-	    fi
-	done
+        for pkg in $pkgs; do
+            if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
+                missing_pkgs+=" $pkg"
+                ci_debug "missing_pkgs=$missing_pkgs"
+            fi
+        done
     fi
     if test -n "$missing_pkgs"; then
 	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
@@ -174,6 +178,7 @@ function install_pkg_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
+    ci_debug "Running install_boost_on_ubuntu() in install-deps.sh"
     local ver=1.75
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
@@ -214,6 +219,7 @@ function install_boost_on_ubuntu {
 }
 
 function install_libzbd_on_ubuntu {
+    ci_debug "Running install_libzbd_on_ubuntu() in install-deps.sh"
     local codename=$1
     local project=libzbd
     local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
@@ -240,6 +246,89 @@ function install_libpmem_on_ubuntu {
 
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
+}
+
+function ensure_decent_gcc_on_rh {
+    local old=$(gcc -dumpversion)
+    local dts_ver=$1
+    if version_lt $old $dts_ver; then
+        if test -t 1; then
+            # interactive shell
+            cat <<EOF
+Your GCC is too old. Please run following command to add DTS to your environment:
+
+scl enable gcc-toolset-$dts_ver bash
+
+Or add the following line to the end of ~/.bashrc and run "source ~/.bashrc" to add it permanently:
+
+source scl_source enable gcc-toolset-$dts_ver
+EOF
+        else
+            # non-interactive shell
+            source /opt/rh/gcc-toolset-$dts_ver/enable
+        fi
+    fi
+}
+
+function populate_wheelhouse() {
+    ci_debug "Running populate_wheelhouse() in install-deps.sh"
+    local install=$1
+    shift
+
+    # although pip comes with virtualenv, having a recent version
+    # of pip matters when it comes to using wheel packages
+    PIP_OPTS="--timeout 300 --exists-action i"
+    pip $PIP_OPTS $install \
+      'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
+    if test $# != 0 ; then
+        # '--use-feature=fast-deps --use-deprecated=legacy-resolver' added per
+        # https://github.com/pypa/pip/issues/9818 These should be able to be
+        # removed at some point in the future.
+        pip --use-feature=fast-deps --use-deprecated=legacy-resolver $PIP_OPTS $install $@ || return 1
+    fi
+}
+
+function activate_virtualenv() {
+    ci_debug "Running activate_virtualenv() in install-deps.sh"
+    local top_srcdir=$1
+    local env_dir=$top_srcdir/install-deps-python3
+
+    if ! test -d $env_dir ; then
+        python3 -m venv ${env_dir}
+        . $env_dir/bin/activate
+        if ! populate_wheelhouse install ; then
+            rm -rf $env_dir
+            return 1
+        fi
+    fi
+    . $env_dir/bin/activate
+}
+
+function preload_wheels_for_tox() {
+    ci_debug "Running preload_wheels_for_tox() in install-deps.sh"
+    local ini=$1
+    shift
+    pushd . > /dev/null
+    cd $(dirname $ini)
+    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
+    local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+    local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+    local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
+    local md5=wheelhouse/md5
+    if test "$require"; then
+        if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
+            rm -rf wheelhouse
+        fi
+    fi
+    if test "$require" && ! test -d wheelhouse ; then
+        type python3 > /dev/null 2>&1 || continue
+        activate_virtualenv $top_srcdir || exit 1
+        python3 -m pip install --upgrade pip
+        populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
+        mv $wip_wheelhouse wheelhouse
+        md5sum $require_files $constraint_files > $md5
+    fi
+    popd > /dev/null
 }
 
 for_make_check=false
@@ -330,7 +419,7 @@ else
                 # state. Run the command again after `dpkg --configure -a` to
                 # bring package manager back into a clean state.
                 $SUDO dpkg --configure -a
-                in_jenkins && echo "CI_DEBUG: trying to install $INSTALL_EXTRA_PACKAGES again"
+                ci_debug "trying to install $INSTALL_EXTRA_PACKAGES again"
                 $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
             fi
         fi
@@ -358,8 +447,9 @@ else
         fi
         touch $DIR/status
 
-	backports=""
-	control=$(munge_debian_control "$VERSION" "debian/control")
+        ci_debug "Running munge_debian_control() in install-deps.sh"
+        backports=""
+        control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
@@ -380,12 +470,20 @@ else
 	    build_profiles+=",pkg.ceph.jaeger"
 	fi
 
-	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
-	      --build-profiles "${build_profiles#,}" \
-	      --install --remove \
-	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
-	if [ "$control" != "debian/control" ] ; then rm $control; fi
+        ci_debug "for_make_check=$for_make_check"
+        ci_debug "with_seastar=$with_seastar"
+        ci_debug "with_jaeger=$with_jaeger"
+        ci_debug "build_profiles=$build_profiles"
+        ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"
+
+        $SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
+              --build-profiles "${build_profiles#,}" \
+              --install --remove \
+              --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+        ci_debug "Removing ceph-build-deps"
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
+        if [ "$control" != "debian/control" ] ; then rm $control; fi
+
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
@@ -517,3 +615,5 @@ if $for_make_check; then
     rm -rf $XDG_CACHE_HOME
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
+
+ci_debug "End install-deps.sh" || true
