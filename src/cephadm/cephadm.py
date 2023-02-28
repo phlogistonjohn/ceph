@@ -1803,6 +1803,29 @@ if sys.version_info < (3, 8):  # pragma: no cover
     asyncio.set_child_watcher(ThreadedChildWatcher())
 
 
+def _pidfd_supported() -> bool:
+    try:
+        os.close(os.pidfd_open(os.getpid(), 0))
+    except (OSError, AttributeError):
+        return False
+    return True
+
+# if the kernel version is 5.3 or newer and python provides a PidfdChildWatcher
+# we prefer to use it for improved memory usage, etc.
+# See: https://docs.python.org/3/library/asyncio-policy.html#asyncio.PidfdChildWatcher
+#
+# NOTE: In the future this might make more sense as part of our CephadmContext.
+# But to keep this simple and consistent with existing code, this is set up at
+# the file/module scope, same as the section above.
+# Additionally, future versions of python may opt to make this the default when
+# possible, making this unnecessary. (py3.12?)
+if _pidfd_supported():  # pragma: no cover
+    try:
+        asyncio.set_child_watcher(asyncio.PidfdChildWatcher())
+    except AttributeError:
+        pass
+
+
 try:
     from asyncio import run as async_run   # type: ignore[attr-defined]
 except ImportError:  # pragma: no cover
