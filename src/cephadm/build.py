@@ -54,6 +54,10 @@ def _did_rexec():
     return bool(os.environ.get("_BUILD_PYTHON_SET", ""))
 
 
+def _ceph_root():
+    return pathlib.Path('..')  # XXX: hack, do this right!
+
+
 def _build(dest, src, versioning_vars=None):
     """Build the binary."""
     os.chdir(src)
@@ -66,6 +70,12 @@ def _build(dest, src, versioning_vars=None):
         # cephadmlib is cephadm's private library of modules
         shutil.copytree(
             "cephadmlib", tempdir / "cephadmlib", ignore=_ignore_cephadmlib
+        )
+        # make 'ceph' library from python-common available in the zipapp
+        shutil.copytree(
+            _ceph_root() / "python-common/ceph",
+            tempdir / "ceph",
+            ignore=_ignore_cephadmlib,
         )
         # cephadm.py is cephadm's main script for the "binary"
         # this must be renamed to __main__.py for the zipapp
