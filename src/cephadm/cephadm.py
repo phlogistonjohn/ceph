@@ -147,9 +147,12 @@ from cephadmlib.host_facts import HostFacts, list_networks
 from cephadmlib.daemon_form import (
     DaemonForm,
     SysctlDaemonForm,
+    UnexpectedDaemonTypeError,
+    UserGroupDaemonForm,
     create as daemon_form_create,
     register as register_daemon_form,
 )
+from cephadmlib.container_daemon_form import ContainerDaemonForm
 from cephadmlib.sysctl import install_sysctl, migrate_sysctl_dir
 from cephadmlib.firewalld import Firewalld, update_firewalld
 
@@ -5629,10 +5632,45 @@ def _dispatch_deploy(
             deployment_type=deployment_type,
             endpoints=daemon_endpoints,
         )
-
     else:
-        raise Error('daemon type {} not implemented in command_deploy function'
-                    .format(daemon_type))
+        try:
+            _deploy_daemon_container(
+                ctx, ident, daemon_endpoints, deployment_type
+            )
+        except UnexpectedDaemonTypeError:
+            raise Error('daemon type {} not implemented in command_deploy function'
+                        .format(daemon_type))
+
+
+def _deploy_daemon_container(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    daemon_endpoints: List[EndPoint],
+    deployment_type: DeploymentType,
+) -> None:
+    daemon = daemon_form_create(ctx, ident)
+    assert isinstance(daemon, ContainerDaemonForm)
+    daemon.customize_container_endpoints(daemon_endpoints, deployment_type)
+    ctr = daemon.container(ctx)
+    ics = daemon.init_containers(ctx)
+    config, keyring = daemon.config_and_keyring(ctx)
+    if isinstance(daemon, UserGroupDaemonForm):
+        uid, gid = daemon.uid_gid(ctx)
+    else:
+        uid, gid = extract_uid_gid(ctx)
+    deploy_daemon(
+        ctx,
+        ident,
+        ctr,
+        uid,
+        gid,
+        config=config,
+        keyring=keyring,
+        deployment_type=deployment_type,
+        endpoints=daemon_endpoints,
+        osd_fsid=daemon.osd_fsid,
+        init_containers=ics,
+    )
 
 ##################################
 
