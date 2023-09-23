@@ -2,7 +2,7 @@
 
 import abc
 
-from typing import Type, TypeVar, List
+from typing import Type, TypeVar, List, Tuple
 
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity
@@ -93,6 +93,26 @@ class FirewalledServiceDaemonForm(DaemonForm, metaclass=abc.ABCMeta):
     @classmethod
     def __subclasshook__(cls, other: Type[DF]) -> bool:
         return callable(getattr(other, 'firewall_service_name', None))
+
+
+class UserGroupDaemonForm(DaemonForm, metaclass=abc.ABCMeta):
+    """The UserGroupDaemonForm is an optional subclass that some DaemonForm
+    types may choose to implement. A UserGroupDaemonForm must implement the
+    uid_gid method.
+    """
+
+    @abc.abstractmethod
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        """Return a (uid, gid) tuple indicating what UID and GID the
+        daemon is expected to run as. This function is permitted to
+        take complex actions such as running a container to get the
+        needed information.
+        """
+        raise NotImplementedError()  # pragma: no cover
+
+    @classmethod
+    def __subclasshook__(cls, other: Type[DF]) -> bool:
+        return callable(getattr(other, 'uid_gid', None))
 
 
 _DAEMON_FORMERS = []
