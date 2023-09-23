@@ -19,7 +19,6 @@ import tempfile
 import time
 import errno
 import ssl
-from enum import Enum
 from typing import Dict, List, Tuple, Optional, Union, Any, Callable, IO, Sequence, TypeVar, cast, Iterable, TextIO
 
 import re
@@ -80,7 +79,7 @@ from cephadmlib.constants import (
     SYSCTL_DIR,
     UNIT_DIR,
 )
-from cephadmlib.context import CephadmContext
+from cephadmlib.context import CephadmContext, DeploymentType
 from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
@@ -206,17 +205,6 @@ class ContainerInfo:
                 and self.image_id == other.image_id
                 and self.start == other.start
                 and self.version == other.version)
-
-
-class DeploymentType(Enum):
-    # Fresh deployment of a daemon.
-    DEFAULT = 'Deploy'
-    # Redeploying a daemon. Works the same as fresh
-    # deployment minus port checking.
-    REDEPLOY = 'Redeploy'
-    # Reconfiguring a daemon. Rewrites config
-    # files and potentially restarts daemon.
-    RECONFIG = 'Reconfig'
 
 ##################################
 

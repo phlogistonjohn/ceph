@@ -1,6 +1,7 @@
 # context.py - cephadm application context support classes
 
 import argparse
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from .constants import (
@@ -73,3 +74,14 @@ class CephadmContext:
             setattr(self._args, name, value)
         else:
             super().__setattr__(name, value)
+
+
+class DeploymentType(Enum):
+    # Fresh deployment of a daemon.
+    DEFAULT = 'Deploy'
+    # Redeploying a daemon. Works the same as fresh
+    # deployment minus port checking.
+    REDEPLOY = 'Redeploy'
+    # Reconfiguring a daemon. Rewrites config
+    # files and potentially restarts daemon.
+    RECONFIG = 'Reconfig'
