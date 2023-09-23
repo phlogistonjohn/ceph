@@ -556,7 +556,7 @@ class Monitoring(DaemonForm):
 
 
 @register_daemon_form
-class NFSGanesha(DaemonForm):
+class NFSGanesha(ContainerDaemonForm):
     """Defines a NFS-Ganesha container"""
 
     daemon_type = 'nfs'
@@ -704,6 +704,23 @@ class NFSGanesha(DaemonForm):
 
     def firewall_service_name(self) -> str:
         return 'nfs'
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
+    def customize_container_endpoints(
+        self, endpoints: List[EndPoint], deployment_type: DeploymentType
+    ) -> None:
+        if deployment_type == DeploymentType.DEFAULT and not endpoints:
+            nfs_ports = list(NFSGanesha.port_map.values())
+            endpoints.extend([EndPoint('0.0.0.0', p) for p in nfs_ports])
+
+    # TODO: extract ganesha uid/gid (997, 994) ?
+
+    def config_and_keyring(
+        self, ctx: CephadmContext
+    ) -> Tuple[Optional[str], Optional[str]]:
+        return get_config_and_keyring(ctx)
 
 ##################################
 
@@ -5485,28 +5502,6 @@ def _dispatch_deploy(
             c,
             uid,
             gid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints
-        )
-
-    elif daemon_type == NFSGanesha.daemon_type:
-        # only check ports if this is a fresh deployment
-        if deployment_type == DeploymentType.DEFAULT and not daemon_endpoints:
-            nfs_ports = list(NFSGanesha.port_map.values())
-            daemon_endpoints = [EndPoint('0.0.0.0', p) for p in nfs_ports]
-
-        config, keyring = get_config_and_keyring(ctx)
-        # TODO: extract ganesha uid/gid (997, 994) ?
-        uid, gid = extract_uid_gid(ctx)
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            config=config,
-            keyring=keyring,
             deployment_type=deployment_type,
             endpoints=daemon_endpoints
         )
