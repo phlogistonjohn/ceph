@@ -2,6 +2,7 @@ import mock
 import os
 import pytest
 import time
+import uuid
 
 from contextlib import contextmanager
 from pyfakefs import fake_filesystem
@@ -165,3 +166,14 @@ def with_cephadm_ctx(
         else:
             yield ctx
 
+
+@pytest.fixture
+def temp_fsid(request):
+    """Generate a temporary per-test UUID for use as a Ceph FSID.
+    This UUID is based on hashing the name of the test (as part of a made up URI)
+    and will therefore vary across tests but not vary across runs of the same test.
+    """
+    name = request.node.name
+    return str(
+        uuid.uuid5(uuid.NAMESPACE_URL, f'http://ceph.io/#cephadm:test:{name}')
+    )
