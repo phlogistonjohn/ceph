@@ -7,22 +7,22 @@ from .fixtures import (
     import_cephadm,
     mock_podman,
     with_cephadm_ctx,
+    temp_fsid,
 )
 
 
 _cephadm = import_cephadm()
 
 
-def test_deploy_nfs_container(cephadm_fs, monkeypatch):
+def test_deploy_nfs_container(cephadm_fs, monkeypatch, temp_fsid):
     _call = mock.MagicMock(return_value=('', '', 0))
     monkeypatch.setattr('cephadmlib.container_types.call', _call)
     _firewalld = mock.MagicMock()
     _firewalld().external_ports.get.return_value = []
     monkeypatch.setattr('cephadm.Firewalld', _firewalld)
-    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
         ctx.container_engine = mock_podman()
-        ctx.fsid = fsid
+        ctx.fsid = temp_fsid
         ctx.name = 'nfs.fun'
         ctx.image = 'quay.io/ceph/ceph:latest'
         ctx.reconfig = False
@@ -36,16 +36,16 @@ def test_deploy_nfs_container(cephadm_fs, monkeypatch):
         }
         _cephadm._common_deploy(ctx)
 
-    with open(f'/var/lib/ceph/{fsid}/nfs.fun/unit.run') as f:
+    with open(f'/var/lib/ceph/{temp_fsid}/nfs.fun/unit.run') as f:
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
     assert runfile_lines[-1].endswith('quay.io/ceph/ceph:latest -F -L STDERR')
     _firewalld().open_ports.assert_called_with([2049])
-    with open(f'/var/lib/ceph/{fsid}/nfs.fun/config') as f:
+    with open(f'/var/lib/ceph/{temp_fsid}/nfs.fun/config') as f:
         assert f.read() == 'BALONEY'
-    with open(f'/var/lib/ceph/{fsid}/nfs.fun/keyring') as f:
+    with open(f'/var/lib/ceph/{temp_fsid}/nfs.fun/keyring') as f:
         assert f.read() == 'BUNKUS'
-    with open(f'/var/lib/ceph/{fsid}/nfs.fun/etc/ganesha/ganesha.conf') as f:
+    with open(f'/var/lib/ceph/{temp_fsid}/nfs.fun/etc/ganesha/ganesha.conf') as f:
         assert f.read() == 'FAKE'
 
 
