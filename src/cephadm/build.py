@@ -37,6 +37,28 @@ _VALID_VERS_VARS = [
 ]
 
 
+_DEP_SRC_PIP = "pip"
+_DEP_SRC_RPM = "rpm"
+
+
+class DependencyOpts:
+    enabled = False
+    requirements = _ZIPAPP_REQS
+    mode = _DEP_SRC_PIP
+
+    def __init__(self, bundled_dependencies):
+        if bundled_dependencies in ("", "none"):
+            return
+        assert bundled_dependencies in (_DEP_SRC_PIP, _DEP_SRC_RPM)
+        self.mode = bundled_dependencies
+        self.enabled = True
+        log.debug(f'Dependencies: {self.enabled}')
+        log.debug(f'Dependencies Source: {self.mode}')
+
+    def __bool__(self):
+        return self.enabled and os.path.isfile(self.requirements)
+
+
 def _reexec(python):
     """Switch to the selected version of python by exec'ing into the desired
     python path.
@@ -55,14 +77,14 @@ def _did_rexec():
     return bool(os.environ.get("_BUILD_PYTHON_SET", ""))
 
 
-def _build(dest, src, versioning_vars=None):
+def _build(dest, src, versioning_vars=None, deps=None):
     """Build the binary."""
     os.chdir(src)
     tempdir = pathlib.Path(tempfile.mkdtemp(suffix=".cephadm.build"))
     log.debug("working in %s", tempdir)
     try:
-        if os.path.isfile(_ZIPAPP_REQS):
-            _install_deps(tempdir)
+        if deps:
+            _install_deps(deps, tempdir)
         log.info("Copying contents")
         # cephadmlib is cephadm's private library of modules
         shutil.copytree(
@@ -83,7 +105,9 @@ def _ignore_cephadmlib(source_dir, names):
     return [
         name
         for name in names
-        if name.endswith(("~", ".old", ".swp", ".pyc", ".pyo", "__pycache__"))
+        if name.endswith(
+            ("~", ".old", ".swp", ".pyc", ".pyo", ".so", "__pycache__")
+        )
     ]
 
 
@@ -117,10 +141,70 @@ def _compile(dest, tempdir):
         log.info("Zipapp created without compression")
 
 
-def _install_deps(tempdir):
+def _install_deps(deps, tempdir):
+    if deps.mode == _DEP_SRC_PIP:
+        return _install_pip_deps(tempdir)
+    if deps.mode == _DEP_SRC_RPM:
+        return _install_rpm_deps(deps, tempdir)
+    raise ValueError(f'unexpected deps mode: {deps.mode}')
+
+
+def _install_rpm_deps(deps, tempdir):
+    log.info("Installing dependencies using RPMs")
+    pkgs = []
+    with open(deps.requirements) as fh:
+        for line in fh:
+            if line.startswith('#'):
+                continue
+            pkgs.append(line.split(None)[0])
+    log.warning("Ignoring versions specified in the requirements file")
+    log.info(f"Looking for packages for: {pkgs!r}")
+    for pkg in pkgs:
+        _deps_from_rpm(deps, pkg, tempdir)
+
+
+def _deps_from_rpm(deps, pkg, tempdir):
+    dist = f'python3dist({pkg})'.lower()
+    try:
+        res = subprocess.run(
+            ['rpm', '-q', '--whatprovides', dist],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as err:
+        log.error(f"Command failed: {err.args[1]!r}")
+        log.error(f"An installed RPM package for {pkg} was not found")
+        sys.exit(1)
+    rpmname = res.stdout.strip().decode('utf8')
+    log.info(f"RPM Package: {rpmname}")
+    res = subprocess.run(
+        ['rpm', '-ql', rpmname], check=True, capture_output=True
+    )
+    paths = [l.decode('utf8') for l in res.stdout.splitlines()]
+    top_level = None
+    for path in paths:
+        if path.endswith('top_level.txt'):
+            top_level = pathlib.Path(path)
+    if not top_level:
+        raise ValueError('top_level not found')
+    meta_dir = top_level.parent
+    pkg_dirs = [
+        top_level.parent.parent / p
+        for p in top_level.read_text().splitlines()
+    ]
+    meta_dest = tempdir / meta_dir.name
+    log.info(f"Copying {meta_dir} to {meta_dest}")
+    shutil.copytree(meta_dir, meta_dest, ignore=_ignore_cephadmlib)
+    for pkg_dir in pkg_dirs:
+        pkg_dest = tempdir / pkg_dir.name
+        log.info(f"Copying {pkg_dir} to {pkg_dest}")
+        shutil.copytree(pkg_dir, pkg_dest, ignore=_ignore_cephadmlib)
+
+
+def _install_pip_deps(tempdir):
     """Install dependencies with pip."""
     # TODO we could explicitly pass a python version here
-    log.info("Installing dependencies")
+    log.info("Installing dependencies using pip")
     # best effort to disable compilers, packages in the zipapp
     # must be pure python.
     env = os.environ.copy()
@@ -187,6 +271,13 @@ def main():
         action="append",
         help="Set a key=value pair in the generated version info file",
     )
+    parser.add_argument(
+        "--bundled-dependencies",
+        "-B",
+        choices=(_DEP_SRC_PIP, _DEP_SRC_RPM, "none"),
+        default="pip",
+        help="Source for bundled dependencies",
+    )
     args = parser.parse_args()
 
     if not _did_rexec() and args.python:
@@ -215,7 +306,12 @@ def main():
     dest = pathlib.Path(args.dest).absolute()
     log.info("Source Dir: %s", source)
     log.info("Destination Path: %s", dest)
-    _build(dest, source, versioning_vars=args.version_vars)
+    _build(
+        dest,
+        source,
+        versioning_vars=args.version_vars,
+        deps=DependencyOpts(args.bundled_dependencies),
+    )
 
 
 if __name__ == "__main__":
