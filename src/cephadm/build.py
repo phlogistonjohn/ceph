@@ -7,13 +7,14 @@
 
 import argparse
 import compileall
+import json
 import logging
 import os
 import pathlib
 import shutil
 import subprocess
-import tempfile
 import sys
+import tempfile
 
 HAS_ZIPAPP = False
 try:
@@ -59,6 +60,38 @@ class DependencyOpts:
         return self.enabled and os.path.isfile(self.requirements)
 
 
+class DependencyInfo:
+    def __init__(self):
+        self._deps = []
+        self._reqs = {}
+
+    def read_reqs(self, path):
+        with open(path) as fh:
+            self.load_reqs(fh.readlines())
+
+    def load_reqs(self, lines):
+        for line in lines:
+            if line.startswith('#'):
+                continue
+            pname = line.split(None)[0]
+            self._reqs[pname] = line.strip()
+
+    @property
+    def requested_packages(self):
+        return self._reqs.keys()
+
+    def add(self, name, **fields):
+        vals = {'name': name}
+        vals.update({k: v for k, v in fields.items() if v is not None})
+        if name in self._reqs:
+            vals['requirements_entry'] = self._reqs[name]
+        self._deps.append(vals)
+
+    def save(self, path):
+        with open(path, 'w') as fh:
+            json.dump(self._deps, fh)
+
+
 def _reexec(python):
     """Switch to the selected version of python by exec'ing into the desired
     python path.
@@ -82,9 +115,10 @@ def _build(dest, src, versioning_vars=None, deps=None):
     os.chdir(src)
     tempdir = pathlib.Path(tempfile.mkdtemp(suffix=".cephadm.build"))
     log.debug("working in %s", tempdir)
+    dinfo = None
     try:
         if deps:
-            _install_deps(deps, tempdir)
+            dinfo = _install_deps(deps, tempdir)
         log.info("Copying contents")
         # cephadmlib is cephadm's private library of modules
         shutil.copytree(
@@ -93,8 +127,13 @@ def _build(dest, src, versioning_vars=None, deps=None):
         # cephadm.py is cephadm's main script for the "binary"
         # this must be renamed to __main__.py for the zipapp
         shutil.copy("cephadm.py", tempdir / "__main__.py")
+        mdir = tempdir / "_cephadmmeta"
+        mdir.mkdir(parents=True, exist_ok=True)
+        (mdir / "__init__.py").touch(exist_ok=True)
         if versioning_vars:
-            generate_version_file(versioning_vars, tempdir / "_version.py")
+            generate_version_file(versioning_vars, mdir / "version.py")
+        if dinfo:
+            dinfo.save(mdir / "deps.json")
         _compile(dest, tempdir)
     finally:
         shutil.rmtree(tempdir)
@@ -151,19 +190,16 @@ def _install_deps(deps, tempdir):
 
 def _install_rpm_deps(deps, tempdir):
     log.info("Installing dependencies using RPMs")
-    pkgs = []
-    with open(deps.requirements) as fh:
-        for line in fh:
-            if line.startswith('#'):
-                continue
-            pkgs.append(line.split(None)[0])
+    dinfo = DependencyInfo()
+    dinfo.read_reqs(deps.requirements)
     log.warning("Ignoring versions specified in the requirements file")
-    log.info(f"Looking for packages for: {pkgs!r}")
-    for pkg in pkgs:
-        _deps_from_rpm(deps, pkg, tempdir)
+    for pkg in dinfo.requested_packages:
+        log.info(f"Looking for rpm package for: {pkg!r}")
+        _deps_from_rpm(deps, pkg, tempdir, dinfo)
+    return dinfo
 
 
-def _deps_from_rpm(deps, pkg, tempdir):
+def _deps_from_rpm(deps, pkg, tempdir, dinfo):
     dist = f'python3dist({pkg})'.lower()
     try:
         res = subprocess.run(
@@ -176,7 +212,21 @@ def _deps_from_rpm(deps, pkg, tempdir):
         log.error(f"An installed RPM package for {pkg} was not found")
         sys.exit(1)
     rpmname = res.stdout.strip().decode('utf8')
-    log.info(f"RPM Package: {rpmname}")
+    res = subprocess.run(
+        ['rpm', '-q', '--qf', '%{version} %{release} %{epoch}\\n', rpmname],
+        check=True,
+        capture_output=True,
+    )
+    vers = res.stdout.decode('utf8').splitlines()[0].split()
+    log.info(f"RPM Package: {rpmname} ({vers})")
+    dinfo.add(
+        pkg,
+        rpm_name=rpmname,
+        version=vers[0],
+        rpm_release=vers[1],
+        rpm_epoch=vers[2],
+        package_source='rpm',
+    )
     res = subprocess.run(
         ['rpm', '-ql', rpmname], check=True, capture_output=True
     )
@@ -226,6 +276,22 @@ def _install_pip_deps(tempdir):
         ],
         env=env,
     )
+    # record info about what deps we are bundling in
+    dinfo = DependencyInfo()
+    dinfo.read_reqs(_ZIPAPP_REQS)
+    res = subprocess.run(
+        ['pip', 'list', '--format=json', '--path', tempdir],
+        check=True,
+        capture_output=True,
+    )
+    pkgs = json.loads(res.stdout)
+    for pkg in pkgs:
+        dinfo.add(
+            pkg['name'],
+            version=pkg['version'],
+            package_source='pip',
+        )
+    return dinfo
 
 
 def generate_version_file(versioning_vars, dest):
