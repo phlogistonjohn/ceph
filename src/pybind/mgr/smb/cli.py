@@ -22,13 +22,13 @@ class Command:
 
     Example:
     >>> class Example:
-    ...     @Command(SHARE, 'foo', perm='r')
+    ...     @Command('share', 'foo', perm='r')
     ...     def foo(self):
     ...         return {'test': 1}
     ...
     >>> ex = Example()
     >>> assert ex.foo() == {'test': 1}
-    >>> assert ex.foo.command(format='yaml') == "test: 1\\n"
+    >>> assert ex.foo.command(format='yaml') == (0, "test: 1\\n", "")
     """
     def __init__(self, scope: str, suffix: str, perm: str) -> None:
         self._scope = scope
