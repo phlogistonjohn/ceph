@@ -187,3 +187,28 @@ def test_from_request_objects(obj, count, expected):
     else:
         with pytest.raises(ValueError, match=expected):
             smb.cluster.ClusterRequest.from_dict(obj)
+
+
+
+def test_foo():
+    from smb.resource import Example, Bonk
+
+    e1 = Example('finle', '99-a')
+    s1 = e1.to_simplified()
+    print(s1)
+    Example.from_simplified(s1)
+    e1.contents = [
+        Bonk(label='jo', width=43, height=8, length=12),
+        Bonk(label='moo', width=3, height=18, length=112),
+        Bonk(label='go', width=2, height=99, length=102),
+    ]
+    s1 = e1.to_simplified()
+    print(s1)
+    x = Example.from_simplified(s1)
+    assert x.name == 'finle'
+    assert x.serial_num == '99-a'
+    assert len(x.contents) == 3
+    assert x.contents[0].label == 'jo'
+    assert x.contents[0].width == 43
+    assert x.contents[1].label == 'moo'
+    assert x.contents[1].width == 3

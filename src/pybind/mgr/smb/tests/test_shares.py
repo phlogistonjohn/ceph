@@ -11,7 +11,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': 'snackage',
                     'name': 'Snack Tray',
                     'cephfs': {
@@ -23,6 +23,8 @@ import smb.shares
             1,
             [
                 {
+                    'resource_type': 'ceph.smb.share',
+                    'intent': 'present',
                     'share_id': 'snackage',
                     'name': 'Snack Tray',
                     'readonly': False,
@@ -40,7 +42,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': 'transport',
                     'cephfs': {
                         'volume': 'cephfs',
@@ -52,6 +54,8 @@ import smb.shares
             1,
             [
                 {
+                    'resource_type': 'ceph.smb.share',
+                    'intent': 'present',
                     'share_id': 'transport',
                     'name': 'transport',
                     'readonly': False,
@@ -71,7 +75,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': 'subway',
                     'cephfs': {
                         'volume': 'cephfs',
@@ -83,6 +87,8 @@ import smb.shares
             1,
             [
                 {
+                    'resource_type': 'ceph.smb.share',
+                    'intent': 'present',
                     'share_id': 'subway',
                     'name': 'subway',
                     'readonly': False,
@@ -91,7 +97,6 @@ import smb.shares
                     'path': '',
                     'cephfs': {
                         'volume': 'cephfs',
-                        'subvolumegroup': '',
                         'subvolume': 'way',
                         'path': '/',
                         'provider': 'kcephfs',
@@ -102,9 +107,10 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share-list',
-                    'values': [
+                    #'resource_type': 'ceph.smb.share-list',
+                    'resources': [
                         {
+                            'resource_type': 'ceph.smb.share',
                             'share_id': 'birds',
                             'cephfs': {
                                 'volume': 'cephfs',
@@ -112,6 +118,7 @@ import smb.shares
                             },
                         },
                         {
+                            'resource_type': 'ceph.smb.share',
                             'share_id': 'reptiles',
                             'cephfs': {
                                 'volume': 'cephfs',
@@ -124,6 +131,8 @@ import smb.shares
             2,
             [
                 {
+                    'resource_type': 'ceph.smb.share',
+                    'intent': 'present',
                     'share_id': 'birds',
                     'name': 'birds',
                     'readonly': False,
@@ -137,6 +146,8 @@ import smb.shares
                     },
                 },
                 {
+                    'resource_type': 'ceph.smb.share',
+                    'intent': 'present',
                     'share_id': 'reptiles',
                     'name': 'reptiles',
                     'readonly': False,
@@ -154,11 +165,11 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'foobar',
+                    'resource_type': 'foobar',
                 }
             ),
             -1,
-            "object_type",
+            "resource_type",
         ),
         (
             json.dumps(
@@ -167,12 +178,12 @@ import smb.shares
                 }
             ),
             -1,
-            "object_type",
+            "resource_type",
         ),
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'name': 'Bad Mojo',
                     'cephfs': {
                         'volume': 'foovol',
@@ -186,7 +197,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': '',
                     'name': 'Bad Mojo',
                     'cephfs': {
@@ -201,7 +212,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': 'badv',
                     'cephfs': {
                         'path': '/fast/snacks',
@@ -214,7 +225,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': 'badv',
                     'cephfs': {
                         'volume': '',
@@ -228,7 +239,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': 'badv',
                     'cephfs': {
                         'volume': 'fooish',
@@ -243,7 +254,7 @@ import smb.shares
         (
             json.dumps(
                 {
-                    'object_type': 'ceph-smb-share',
+                    'resource_type': 'ceph.smb.share',
                     'share_id': 'badv',
                 }
             ),
@@ -256,7 +267,31 @@ def test_from_text(buf, count, expected):
     if count > 0:
         shares = smb.shares.from_text(buf)
         assert len(shares) == count
-        assert [s.share.to_simplified() for s in shares] == expected
+        assert expected == [s.to_simplified() for s in shares]
     else:
         with pytest.raises(ValueError, match=expected):
             smb.shares.from_text(buf)
+
+
+
+
+
+def test_one():
+    jr = {
+        'resource_type': 'ceph.smb.share',
+        'share_id': 'myshare1',
+        'name': 'My First Share',
+        'cephfs': {
+            'volume': 'foovol',
+            'path': '/fast/snacks',
+        },
+    }
+    share1 = smb.shares.from_text(json.dumps(jr))
+    out = share1[0].to_simplified()
+    jr['intent'] = 'present'
+    jr['path'] = ''
+    jr['browseable'] = True
+    jr['readonly'] = False
+    jr['subsystem'] = 'cephfs'
+    jr['cephfs']['provider'] = 'kcephfs'
+    assert jr == out

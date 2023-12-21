@@ -1,24 +1,33 @@
-from typing import Any, Iterator, Iterable, List, Optional, Dict, Tuple
-import dataclasses
+from typing import Any, Iterator, Iterable, List, Optional, Dict, Tuple, Annotated
 import json
 import pathlib
 
 from . import config_store
 from .proto import Protocol, Simplified, SimplifiedList
 from .enums import CephFSStorageProvider, SubSystem, Intent, State
+from . import resource
+
+
+
+_embedded = resource.ResourceOptions(embedded=True)
+_quiet = resource.ResourceOptions(keep_false=False)
 
 
 class MissingRequirement(ValueError):
     pass
 
 
-@dataclasses.dataclass
+@resource.component()
 class CephFSStorage:
     volume: str
-    subvolumegroup: str
-    subvolume: str
-    path: str
-    provider: CephFSStorageProvider
+    path: str = '/'
+    subvolumegroup: Annotated[str, _quiet] = ''
+    subvolume: Annotated[str, _quiet] = ''
+    provider: CephFSStorageProvider = CephFSStorageProvider.KERNEL_MOUNT
+
+    def __post_init__(self) -> None:
+        if '/' in self.subvolume and not self.subvolumegroup:
+            self.subvolumegroup, self.subvolume = self.subvolume.split('/')
 
     def validate(self) -> None:
         pass
@@ -32,7 +41,7 @@ class CephFSStorage:
         out = out / self.path
         return str(out)
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         out: Simplified = {'volume': self.volume}
         if self.subvolumegroup or self.subvolume:
             out['subvolumegroup'] = self.subvolumegroup
@@ -67,7 +76,7 @@ class CephFSStorage:
         )
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'CephFSStorage':
+    def xxx_from_dict(cls, data: Simplified) -> 'CephFSStorage':
         try:
             volume = data['volume']
         except KeyError as err:
@@ -79,11 +88,13 @@ class CephFSStorage:
         )
 
 
-@dataclasses.dataclass
-class SMBShare:
-    share_id: str
-    name: str
-    path: str = '/'
+_alt_share_id = resource.ResourceOptions(alt_keys=['share_id'])
+
+
+@resource.component()
+class SMBShareSettings:
+    name: Annotated[str, _alt_share_id]
+    path: str = ''
     readonly: bool = False
     browseable: bool = True
     subsystem: SubSystem = SubSystem.CEPHFS
@@ -92,7 +103,7 @@ class SMBShare:
     def validate(self) -> None:
         pass
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         assert self.cephfs is not None
         out: Simplified = {
             'share_id': self.share_id,
@@ -133,7 +144,7 @@ class SMBShare:
         )
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'SMBShare':
+    def xxx_from_dict(cls, data: Simplified) -> 'SMBShare':
         if 'cephfs' not in data:
             raise MissingRequirement('missing cephfs storage configuration')
         cephfs = CephFSStorage.from_dict(data['cephfs'])
@@ -152,7 +163,7 @@ class SMBShare:
         )
 
 
-class SMBShareStub(SMBShare):
+class SMBShareStub(SMBShareSettings):
     def __init__(self, share_id: str, name: str = '') -> None:
         super().__init__(share_id, name)
 
@@ -160,20 +171,21 @@ class SMBShareStub(SMBShare):
         raise NotImplementedError('invalid to serialize')
 
 
-@dataclasses.dataclass
-class SMBShareIntent:
-    intent: Intent
-    share: SMBShare
+@resource.resource('ceph.smb.share')
+class SMBShare:
+    share_id: str
+    intent: Intent = Intent.PRESENT
+    share: Annotated[SMBShareSettings, _embedded] = None
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'SMBShareIntent':
+    def www_from_dict(cls, data: Simplified) -> 'SMBShare':
         return cls(
             intent=Intent(data.get('intent', Intent.PRESENT)),
             share=SMBShare.from_dict(data),
         )
 
 
-@dataclasses.dataclass
+@resource.resource('ceph.smb.status.share')
 class SMBShareStatus:
     share: SMBShare
     # state is a str so we can report one-off custom states if needed,
@@ -182,7 +194,7 @@ class SMBShareStatus:
     # ceph errno if there was a problem with the change being applied
     errno: int
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         """Return a simplified & serializable representation for the
         SMBShareStatus.
         """
@@ -272,7 +284,7 @@ class FakeSMBShareManager:
         smap = {s.share_id: s for s in self._shares}
         return smap[share_id]
 
-    def apply(self, intents: Iterable[SMBShareIntent]) -> ApplyResults:
+    def apply(self, intents: Iterable[SMBShare]) -> ApplyResults:
         results = ApplyResults()
         for si in intents:
             if si.intent == Intent.REMOVED:
@@ -282,7 +294,7 @@ class FakeSMBShareManager:
         self._save()
         return results
 
-    def _remove(self, results: ApplyResults, si: SMBShareIntent) -> None:
+    def _remove(self, results: ApplyResults, si: SMBShare) -> None:
         assert si.intent == Intent.REMOVED
         smap = {s.share_id: idx for idx, s in enumerate(self._shares)}
         removeme = smap.pop(si.share.share_id, None)
@@ -293,7 +305,7 @@ class FakeSMBShareManager:
             del self._shares[removeme]
             results.add(share, state=str(State.REMOVED))
 
-    def _create(self, results: ApplyResults, si: SMBShareIntent) -> None:
+    def _create(self, results: ApplyResults, si: SMBShare) -> None:
         assert si.intent == Intent.PRESENT
         smap = {s.share_id: idx for idx, s in enumerate(self._shares)}
         if si.share.share_id not in smap:
@@ -359,7 +371,7 @@ def share_to_create(
     volume: str,
     subvolume: str = '',
     readonly: bool = False,
-) -> SMBShareIntent:
+) -> SMBShare:
     storage = CephFSStorage.from_options(
         volume=volume,
         subvolume=subvolume,
@@ -372,35 +384,36 @@ def share_to_create(
         subsystem=SubSystem(subsystem),
         cephfs=storage,
     )
-    return SMBShareIntent(
+    return SMBShare(
         intent=Intent.PRESENT,
         share=share,
     )
 
 
-def share_to_delete(share_id: str) -> SMBShareIntent:
+def share_to_delete(share_id: str) -> SMBShare:
     share = SMBShareStub(share_id=share_id, name='')
-    return SMBShareIntent(
+    return SMBShare(
         intent=Intent.REMOVED,
         share=share,
     )
 
 
-def from_text(buf: str) -> List[SMBShareIntent]:
+def from_text(buf: str) -> List[SMBShare]:
     # TODO: make this yaml capable and sensible
     data = json.loads(buf)
-    return from_request_objects(data)
+    return resource.load(data)
+    # return from_request_objects(data)
 
 
-def from_request_objects(data: Simplified) -> List[SMBShareIntent]:
+def from_request_objects(data: Simplified) -> List[SMBShare]:
     object_type = data.pop('object_type', '')
     if not object_type:
         raise MissingRequirement('missing object_type field')
     if object_type == 'ceph-smb-share-list':
         assert isinstance(data['values'], list)
-        return [SMBShareIntent.from_dict(d) for d in data['values']]
+        return [SMBShare.from_dict(d) for d in data['values']]
     if object_type == 'ceph-smb-share':
-        return [SMBShareIntent.from_dict(data)]
+        return [SMBShare.from_dict(data)]
     raise MissingRequirement('incorrect object_type')
 
 
@@ -411,7 +424,7 @@ class SMBShareManager(Protocol):
     def __getitem__(self, share_id: str) -> SMBShare:
         ...  # pragma: no cover
 
-    def apply(self, intents: Iterable[SMBShareIntent]) -> ApplyResults:
+    def apply(self, intents: Iterable[SMBShare]) -> ApplyResults:
         ...  # pragma: no cover
 
     def configuration(self) -> Simplified:

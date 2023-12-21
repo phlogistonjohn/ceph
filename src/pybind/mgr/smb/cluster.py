@@ -1,11 +1,11 @@
 from typing import Iterator, Dict, List, Optional
-import dataclasses
 import json
 
 from .enums import AuthMode, JoinSourceType, UserGroupSourceType, Intent
 from .proto import Protocol, Simplified
 from . import config_store
 from . import shares
+from . import resource
 
 
 class SMBCluster(Protocol):
@@ -21,7 +21,7 @@ class SMBClusterManager(Protocol):
         ...  # pragma: no cover
 
 
-@dataclasses.dataclass
+@resource.component()
 class JoinSource:
     source_type: JoinSourceType
     username: str = ''
@@ -29,7 +29,7 @@ class JoinSource:
     uri: str = ''
     reference: str = ''
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         out: Simplified = {'source_type': str(self.source_type)}
         if self.source_type == JoinSourceType.PASSWORD:
             out['username'] = self.username
@@ -39,7 +39,7 @@ class JoinSource:
         return out
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'JoinSource':
+    def xxx_from_dict(cls, data: Simplified) -> 'JoinSource':
         source_type = JoinSourceType(data['source_type'])
         if source_type == JoinSourceType.PASSWORD:
             return cls(
@@ -50,7 +50,7 @@ class JoinSource:
         raise NotImplementedError()
 
 
-@dataclasses.dataclass
+@resource.component()
 class UserGroupSource:
     source_type: UserGroupSourceType
     users: List[Simplified]
@@ -58,7 +58,7 @@ class UserGroupSource:
     uri: str = ''
     reference: str = ''
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         out: Simplified = {'source_type': str(self.source_type)}
         if self.source_type == UserGroupSourceType.INLINE:
             if self.users:
@@ -70,7 +70,7 @@ class UserGroupSource:
         return out
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'UserGroupSource':
+    def xxx_from_dict(cls, data: Simplified) -> 'UserGroupSource':
         source_type = UserGroupSourceType(data['source_type'])
         if source_type == UserGroupSourceType.INLINE:
             iusers = data.get('users', [])
@@ -84,12 +84,12 @@ class UserGroupSource:
         )
 
 
-@dataclasses.dataclass
+@resource.component()
 class DomainSettings:
     realm: str
     join_sources: List[JoinSource]
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         return {
             'realm': str(self.realm),
             'join_sources': [
@@ -98,7 +98,7 @@ class DomainSettings:
         }
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'DomainSettings':
+    def xxx_from_dict(cls, data: Simplified) -> 'DomainSettings':
         realm = data['realm']
         jsrc = data['join_sources']
         assert isinstance(jsrc, list)
@@ -108,11 +108,11 @@ class DomainSettings:
         )
 
 
-@dataclasses.dataclass
+@resource.component()
 class UserGroupSettings:
     user_group_sources: List[UserGroupSource]
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         return {
             'user_group_sources': [
                 s.to_simplified() for s in self.user_group_sources
@@ -120,7 +120,7 @@ class UserGroupSettings:
         }
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'UserGroupSettings':
+    def xxx_from_dict(cls, data: Simplified) -> 'UserGroupSettings':
         usrc = data['user_group_sources']
         assert isinstance(usrc, list)
         return cls(
@@ -128,13 +128,13 @@ class UserGroupSettings:
         )
 
 
-@dataclasses.dataclass
+@resource.component()
 class SMBInstanceSettings:
     auth_mode: AuthMode
     domain_settings: Optional[DomainSettings] = None
     user_group_settings: Optional[UserGroupSettings] = None
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         out: Simplified = {'auth_mode': str(self.auth_mode)}
         if self.auth_mode == AuthMode.USER:
             assert self.user_group_settings
@@ -146,7 +146,7 @@ class SMBInstanceSettings:
         return out
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'SMBInstanceSettings':
+    def xxx_from_dict(cls, data: Simplified) -> 'SMBInstanceSettings':
         usettings = dsettings = None
         auth_mode = AuthMode(data.get('auth_mode', AuthMode.USER))
         if auth_mode == AuthMode.USER:
@@ -164,20 +164,20 @@ class SMBInstanceSettings:
         )
 
 
-@dataclasses.dataclass
+@resource.resource('ceph.smb.cluster')
 class SMBClusterIntent(SMBCluster):
     intent: Intent
     cluster_id: str
     settings: SMBInstanceSettings
 
-    def to_simplified(self) -> Simplified:
+    def xxx_to_simplified(self) -> Simplified:
         out = self.settings.to_simplified()
         out['cluster_id'] = self.cluster_id
         out['intent'] = str(self.intent)
         return out
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'SMBClusterIntent':
+    def xxx_from_dict(cls, data: Simplified) -> 'SMBClusterIntent':
         return cls(
             intent=Intent(data.get('intent', Intent.PRESENT)),
             cluster_id=data['cluster_id'],
@@ -185,13 +185,13 @@ class SMBClusterIntent(SMBCluster):
         )
 
 
-@dataclasses.dataclass
+@resource.component()
 class ClusterRequest:
     object_type: str
     values: List[SMBClusterIntent]
 
     @classmethod
-    def from_dict(cls, data: Simplified) -> 'ClusterRequest':
+    def xxx_from_dict(cls, data: Simplified) -> 'ClusterRequest':
         try:
             object_type = data['object_type']
         except KeyError:
