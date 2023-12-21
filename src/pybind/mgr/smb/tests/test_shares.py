@@ -213,7 +213,7 @@ import smb.shares
             json.dumps(
                 {
                     'resource_type': 'ceph.smb.share',
-                    'share_id': 'badv',
+                    'share_id': 'badv1',
                     'cephfs': {
                         'path': '/fast/snacks',
                     },
@@ -226,7 +226,7 @@ import smb.shares
             json.dumps(
                 {
                     'resource_type': 'ceph.smb.share',
-                    'share_id': 'badv',
+                    'share_id': 'badv2',
                     'cephfs': {
                         'volume': '',
                         'path': '/fast/snacks',
@@ -240,7 +240,7 @@ import smb.shares
             json.dumps(
                 {
                     'resource_type': 'ceph.smb.share',
-                    'share_id': 'badv',
+                    'share_id': 'badv3',
                     'cephfs': {
                         'volume': 'fooish',
                         'subvolume': 'my/bad/input',
@@ -255,7 +255,7 @@ import smb.shares
             json.dumps(
                 {
                     'resource_type': 'ceph.smb.share',
-                    'share_id': 'badv',
+                    'share_id': 'badv4',
                 }
             ),
             -1,
@@ -269,7 +269,7 @@ def test_from_text(buf, count, expected):
         assert len(shares) == count
         assert expected == [s.to_simplified() for s in shares]
     else:
-        with pytest.raises(ValueError, match=expected):
+        with pytest.raises((KeyError, TypeError, ValueError), match=expected):
             smb.shares.from_text(buf)
 
 

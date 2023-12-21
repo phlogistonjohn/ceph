@@ -27,10 +27,18 @@ class CephFSStorage:
 
     def __post_init__(self) -> None:
         if '/' in self.subvolume and not self.subvolumegroup:
-            self.subvolumegroup, self.subvolume = self.subvolume.split('/')
+            try:
+                self.subvolumegroup, self.subvolume = self.subvolume.split('/')
+            except ValueError:
+                raise ValueError('invalid subvolume value: {self.subvolume!r}')
 
     def validate(self) -> None:
-        pass
+        if not self.volume:
+            raise ValueError('volume requires a value')
+        if '/' in self.subvolumegroup:
+            raise ValueError('invalid subvolumegroup value: {self.subvolumegroup!r}')
+        if '/' in self.subvolume:
+            raise ValueError('invalid subvolume value: {self.subvolume!r}')
 
     def absolute_path(self, cephfs_factory: Any) -> str:
         out = pathlib.Path('/')
@@ -101,7 +109,8 @@ class SMBShareSettings:
     cephfs: Optional[CephFSStorage] = None
 
     def validate(self) -> None:
-        pass
+        if self.subsystem == SubSystem.CEPHFS and not self.cephfs:
+            raise ValueError('cephfs configuration missing')
 
     def xxx_to_simplified(self) -> Simplified:
         assert self.cephfs is not None
@@ -183,6 +192,12 @@ class SMBShare:
             intent=Intent(data.get('intent', Intent.PRESENT)),
             share=SMBShare.from_dict(data),
         )
+
+    def validate(self) -> None:
+        if not self.share_id:
+            raise ValueError('share_id requires a value')
+        if not self.share and self.intent == Intent.PRESENT:
+            raise ValueError('share settings are required for present intent')
 
 
 @resource.resource('ceph.smb.status.share')

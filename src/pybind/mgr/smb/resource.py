@@ -246,7 +246,10 @@ def component():
 def get_resource(resource_name, registry: Optional[Dict[str, Type[T]]] = None) -> Type[T]:
     if registry is None:
         registry = _RESOURCES
-    return registry[resource_name]
+    try:
+        return registry[resource_name]
+    except KeyError:
+        raise ValueError(f'no matching resource_type: {resource_name}')
 
 
 def load(data: Simplified) -> Any:
