@@ -10,7 +10,7 @@ import smb.cluster
     [
         (
             {
-                'object_type': 'ceph-smb-cluster',
+                'resource_type': 'ceph.smb.cluster',
                 'cluster_id': 'smb1',
                 'intent': 'present',
                 'auth_mode': 'user',
@@ -52,7 +52,7 @@ import smb.cluster
         ),
         (
             {
-                'object_type': 'ceph-smb-cluster',
+                'resource_type': 'ceph.smb.cluster',
                 'cluster_id': 'smb1',
                 'intent': 'present',
                 'auth_mode': 'active-directory',
@@ -88,8 +88,7 @@ import smb.cluster
         ),
         (
             {
-                'object_type': 'ceph-smb-cluster-list',
-                'values': [
+                'resources': [
                     {
                         'cluster_id': 'smb1',
                         'intent': 'present',
@@ -165,25 +164,30 @@ import smb.cluster
         (
             {},
             -1,
-            "object_type"
+            "resource_type"
         ),
         (
-            {"object_type": "junk"},
+            {"resource_type": "junk"},
             -1,
-            "object_type"
+            "resource_type"
         ),
     ],
 )
 def test_from_request_objects(obj, count, expected):
-    if count > 0:
-        r1 = smb.cluster.ClusterRequest.from_dict(obj)
-        clusters = r1.values
-        assert len(clusters) == count
-        assert [c.to_simplified() for c in clusters] == expected
+    import smb.resource
 
-        serialized = json.dumps(obj)
-        r2 = smb.cluster.ClusterRequest.from_text(serialized)
-        assert r2.values == clusters
+    if count > 0:
+        #r1 = smb.cluster.ClusterRequest.from_dict(obj)
+        #clusters = r1.values
+        #assert len(clusters) == count
+        #assert expected == [c.to_simplified() for c in clusters]
+
+        #serialized = json.dumps(obj)
+        #r2 = smb.cluster.ClusterRequest.from_text(serialized)
+        #assert r2.values == clusters
+        clusters = smb.resource.load(obj)
+        assert len(clusters) == count
+        assert expected == [c.to_simplified() for c in clusters]
     else:
         with pytest.raises(ValueError, match=expected):
             smb.cluster.ClusterRequest.from_dict(obj)

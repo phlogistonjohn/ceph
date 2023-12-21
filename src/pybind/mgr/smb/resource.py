@@ -40,6 +40,8 @@ class _typeinfo:
         self._meta = getattr(self.target_type, '__metadata__', None)
 
     def is_optional(self) -> bool:
+        if self._args is None:
+            return False
         return any(t is type(None) for t in self._args)
 
     def resource_opts(self) -> ResourceOptions:
@@ -54,6 +56,11 @@ class _typeinfo:
             return self.__class__(self.target_type)
         nnt = [t for t in self._args if t is not type(None)][0]
         return self.__class__(nnt)
+
+    def unwrap_optional(self) -> '_typeinfo':
+        if not self.is_optional():
+            return self
+        return self.unwrap()
 
     def takes(self, *target_types: Any) -> bool:
         return self._origin in target_types
@@ -97,6 +104,8 @@ class _Source:
 def _assemble(type_info: _typeinfo, fname: str, source: _Source) -> Any:
     ropts = type_info.resource_opts()
     # determine if we're moving down the "tree" or not
+    if fname == 'user_group_sources':
+        import pdb; pdb.set_trace()
     try:
         tgt = source.select([fname] + (ropts.alt_keys or []))
     except KeyError:
@@ -105,7 +114,7 @@ def _assemble(type_info: _typeinfo, fname: str, source: _Source) -> Any:
         else:
             raise
 
-    innert = type_info.unwrap()
+    innert = type_info.unwrap_optional()
     _as = getattr(innert.target_type, '_assemble_simplified', None)
     _fs = getattr(innert.target_type, 'from_simplified', None)
     with tgt:
@@ -115,18 +124,23 @@ def _assemble(type_info: _typeinfo, fname: str, source: _Source) -> Any:
             return _fs(tgt.data)
         if isinstance(tgt.data, list):
             assert innert.takes(list, List), f'invalid type: {itype!r}'
-            return [_unsimplify(v, innert.target_type) for v in tgt.data]
+            return [_assemble_simplified(innert.unwrap(), _Source(v)) for v in tgt.data]
         if isinstance(tgt.data, dict):
             # keys must be simple types
             assert innert.takes(dict, Dict), f'invalid type: {itype!r}'
-            return {_unsimplify(k, None):_unsimplify(v, innert.target_type) for k, v in tgt.data.items()}
-        if issubclass(innert.target_type, enum.Enum):
-            return innert.target_type(tgt.data)
-        if isinstance(tgt.data, (str, int, float)):
-            return tgt.data
-        if tgt.data is None and type_info.optional:
-            return None
-    raise TypeError(tgt.data)
+            kt, vt = inntert.kv_types()
+            return {_assemble_scalar(kt, k):_assemble_simplified(vt, v) for k, v in tgt.items()}
+        return _assemble_scalar(innert.target_type, tgt.data, type_info.optional)
+
+
+def _assemble_scalar(target_type: Any, value: Any, optional: bool) -> Any:
+    if issubclass(target_type, enum.Enum):
+        return target_type(tgt.data)
+    if isinstance(value, (str, int, float)):
+        return value
+    if value is None and optional:
+        return None
+    raise TypeError(value)
 
 
 def _assemble_simplified(cls: Type[T], src: _Source) -> T:

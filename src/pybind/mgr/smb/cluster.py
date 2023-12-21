@@ -1,4 +1,4 @@
-from typing import Iterator, Dict, List, Optional
+from typing import Iterator, Dict, List, Optional, Annotated
 import json
 
 from .enums import AuthMode, JoinSourceType, UserGroupSourceType, Intent
@@ -164,29 +164,18 @@ class SMBInstanceSettings:
         )
 
 
+_embedded = resource.ResourceOptions(embedded=True)
+
+
 @resource.resource('ceph.smb.cluster')
-class SMBClusterIntent(SMBCluster):
+class SMBClusterIntent:
     intent: Intent
     cluster_id: str
-    settings: SMBInstanceSettings
-
-    def xxx_to_simplified(self) -> Simplified:
-        out = self.settings.to_simplified()
-        out['cluster_id'] = self.cluster_id
-        out['intent'] = str(self.intent)
-        return out
-
-    @classmethod
-    def xxx_from_dict(cls, data: Simplified) -> 'SMBClusterIntent':
-        return cls(
-            intent=Intent(data.get('intent', Intent.PRESENT)),
-            cluster_id=data['cluster_id'],
-            settings=SMBInstanceSettings.from_dict(data),
-        )
+    settings: Annotated[SMBInstanceSettings, _embedded] = None
 
 
 @resource.component()
-class ClusterRequest:
+class XXXClusterRequest:
     object_type: str
     values: List[SMBClusterIntent]
 
