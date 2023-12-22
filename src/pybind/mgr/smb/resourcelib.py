@@ -1,3 +1,4 @@
+from itertools import chain
 from typing import (
     Any,
     Dict,
@@ -33,7 +34,39 @@ class ResourceError(Exception):
 
 
 class MissingFieldError(KeyError, ResourceError):
-    pass
+    def __init__(self, fname: str) -> None:
+        self.fname = fname
+
+    def __str__(self) -> str:
+        return f'field {self.fname!r} not found in source data'
+
+
+class InvalidFieldError(ValueError, ResourceError):
+    def __init__(self, fname: str) -> None:
+        self.fname = fname
+
+    def __str__(self) -> str:
+        return f'field {self.fname!r} has invalid type'
+
+
+class MissingResourceTypeError(ValueError, ResourceError):
+    def __init__(self, data: Simplified) -> None:
+        self.data = data
+
+    def __str__(self) -> str:
+        return 'source data is missing a resource_type field'
+
+
+class InvalidResourceTypeError(ValueError, ResourceError):
+    def __init__(self, *, expected: str = '', actual: str = '') -> None:
+        self.expected = expected
+        self.actual = actual
+
+    def __str__(self) -> str:
+        msg = f'invalid resource type value: {self.actual!r}'
+        if self.expected:
+            msg += f'; expected: {self.expected!r}'
+        return msg
 
 
 @dataclasses.dataclass
@@ -104,21 +137,24 @@ def get_resource(
     try:
         return registry[resource_name]
     except KeyError:
-        raise ValueError(f'no matching resource_type: {resource_name}')
+        raise InvalidResourceTypeError(actual=resource_name)
 
 
-def load(data: Simplified) -> Any:
+def load(data: Simplified) -> List[Any]:
     print("LOADD", data)
+    # Given a bare list. Assume it contains loadable objects.
+    if isinstance(data, list):
+        return list(chain.from_iterable(load(v) for v in data))
+    # Given a "list object"
     if 'resource_type' not in data and 'resources' in data:
-        res = data['resources']
-        if not isinstance(res, list):
+        rl = data['resources']
+        if not isinstance(rl, list):
             raise TypeError(res)
-        out = []
-        for item in res:
-            out.extend(load(item))
-        return out
+        return list(chain.from_iterable(load(v) for v in rl))
+    # anything else must be a "self describing" object with a resource_type
+    # value
     if 'resource_type' not in data:
-        raise ValueError('no resource_type')
+        raise MissingResourceTypeError(data)
     rcls = get_resource(data['resource_type'])
     return [rcls.from_simplified(data)]
 
@@ -359,7 +395,7 @@ def _from_object_field(
     try:
         return _from_scalar(innert, tgt, optional=is_optional)
     except TypeError:
-        raise ValueError(f'field {fname} missing or invalid type')
+        raise InvalidFieldError(fname)
 
 
 @_xt
@@ -370,7 +406,7 @@ def _from_scalar(
     if value is None and (optional or type_info.is_optional()):
         return None
     if issubclass(type_info.target_type, enum.Enum):
-        return type_info.target_type(tgt.data)
+        return type_info.target_type(value)
     if isinstance(value, (str, int, float)):
         return value
     raise TypeError(value)
@@ -385,9 +421,6 @@ def _assert_resource_type(type_info: _typeinfo, source: _Source) -> None:
     try:
         curr_resource_type = source['resource_type'].data
     except KeyError:
-        raise ValueError('source object lacks resource type')
+        raise MissingResourceTypeError(source.data)
     if expected_rt != curr_resource_type:
-        raise ValueError(
-            'resource type mismatch:'
-            f' expected {expected_rt!r}, got {curr_resource_type!r}'
-        )
+        raise InvalidResourceTypeError(expected=expected_rt, actual=curr_resource_type)

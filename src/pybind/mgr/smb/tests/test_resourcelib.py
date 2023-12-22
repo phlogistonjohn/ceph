@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict
 
 import dataclasses
+import enum
 
 import pytest
 
@@ -42,6 +43,23 @@ class ResTwo:
     bbb: List[tclass1]
     ccc: Dict[str, str]
     ddd: rlib.Annotated[tclass3, rlib.Extras(embedded=True)]
+
+
+class _flavor(str, enum.Enum):
+    vanilla = 'vanilla'
+    strawberry = 'strawberry'
+    cherry = 'cherry'
+    unset = ''
+
+    def __str__(self) -> str:
+        return self.value
+
+
+@rlib.resource('test.res.three')
+class ResThree:
+    one: ResOne
+    two: Optional[ResTwo] = None
+    flavor: _flavor = _flavor.unset
 
 
 def test_typeinfo():
@@ -377,3 +395,331 @@ def test_from_simplified(params):
     # objects is not simple
     sdata = obj.to_simplified()
     assert params['expected'] == sdata
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # minimal single object
+        {
+            'data': {
+                'resource_type': 'test.res.one',
+                'zim': 'zoom',
+            },
+            'expected': [
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoom',
+                }
+            ],
+        },
+        # three levels of nesting
+        {
+            'data': {
+                'resource_type': 'test.res.one',
+                'zim': 'zoom',
+                'zam': 'greetings',
+                'jam': {
+                    'name': 'game',
+                    'xyz': {
+                        'foo': 'is here',
+                        'bar': 56,
+                        'baz': 'babble',
+                        'quux': [4, 0, 5],
+                        'womble': 92,
+                        'tags': {'bug': 9, 'feature': 4},
+                    },
+                },
+            },
+            'expected': [
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoom',
+                    'zam': 'greetings',
+                    'jam': {
+                        'name': 'game',
+                        'xyz': {
+                            'foo': 'is here',
+                            'bar': 56,
+                            'baz': 'babble',
+                            'quux': [4, 0, 5],
+                            'womble': 92,
+                            'tags': {'bug': 9, 'feature': 4},
+                        },
+                    },
+                }
+            ],
+        },
+        # nesting with embedding
+        {
+            'data': {
+                'resource_type': 'test.res.two',
+                'aaa': 'apple',
+                'bbb': [
+                    {'foo': 'item1', 'bar': 'yes', 'baz': '0'},
+                    {'foo': 'item2', 'bar': 'no', 'baz': '10'},
+                ],
+                'ccc': {
+                    'cow': 'moo',
+                    'dog': 'arf',
+                },
+                'artists': ['me', 'you'],
+                'kind': 'very',
+            },
+            'expected': [
+                {
+                    'resource_type': 'test.res.two',
+                    'aaa': 'apple',
+                    'bbb': [
+                        {
+                            'foo': 'item1',
+                            'bar': 'yes',
+                            'baz': '0',
+                            'womble': None,
+                        },
+                        {
+                            'foo': 'item2',
+                            'bar': 'no',
+                            'baz': '10',
+                            'womble': None,
+                        },
+                    ],
+                    'ccc': {
+                        'cow': 'moo',
+                        'dog': 'arf',
+                    },
+                    'artists': ['me', 'you'],
+                    'kind': 'very',
+                }
+            ],
+        },
+        #  embedding is optional in a source
+        {
+            'data': {
+                'resource_type': 'test.res.two',
+                'aaa': 'artichoke',
+                'bbb': [
+                    {'foo': 'item1', 'bar': 'yes', 'baz': '0'},
+                ],
+                'ccc': {
+                    'cow': 'moo',
+                    'dog': 'arf',
+                },
+                'ddd': {
+                    'artists': ['city', 'country'],
+                },
+            },
+            'expected': [
+                {
+                    'resource_type': 'test.res.two',
+                    'aaa': 'artichoke',
+                    'bbb': [
+                        {
+                            'foo': 'item1',
+                            'bar': 'yes',
+                            'baz': '0',
+                            'womble': None,
+                        },
+                    ],
+                    'ccc': {
+                        'cow': 'moo',
+                        'dog': 'arf',
+                    },
+                    'artists': ['city', 'country'],
+                    'kind': '',
+                }
+            ],
+        },
+        # two objects in a simple list
+        {
+            'data': [
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoom',
+                },
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoinks',
+                    'zam': 'zola',
+                },
+            ],
+            'expected': [
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoom',
+                },
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoinks',
+                    'zam': 'zola',
+                },
+            ],
+        },
+        # two objects, different kinds
+        {
+            'data': [
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoom',
+                },
+                {
+                    'resource_type': 'test.res.two',
+                    'aaa': 'alpha',
+                    'bbb': [],
+                    'ccc': {
+                        'delta': 'flyer',
+                    },
+                    'artists': ['country', 'western'],
+                    'kind': '',
+                },
+            ],
+            'expected': [
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zoom',
+                },
+                {
+                    'resource_type': 'test.res.two',
+                    'aaa': 'alpha',
+                    'bbb': [],
+                    'ccc': {
+                        'delta': 'flyer',
+                    },
+                    'artists': ['country', 'western'],
+                    'kind': '',
+                },
+            ],
+        },
+        # two objects, "list type object"
+        {
+            'data': {
+                'resources': [
+                    {
+                        'resource_type': 'test.res.one',
+                        'zim': 'zippy',
+                    },
+                    {
+                        'resource_type': 'test.res.two',
+                        'aaa': 'alpha',
+                        'bbb': [],
+                        'ccc': {
+                            'delta': 'flyer',
+                        },
+                        'artists': ['country', 'western'],
+                        'kind': '',
+                    },
+                ]
+            },
+            'expected': [
+                {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zippy',
+                },
+                {
+                    'resource_type': 'test.res.two',
+                    'aaa': 'alpha',
+                    'bbb': [],
+                    'ccc': {
+                        'delta': 'flyer',
+                    },
+                    'artists': ['country', 'western'],
+                    'kind': '',
+                },
+            ],
+        },
+        # with enum
+        {
+            'data': {
+                'resource_type': 'test.res.three',
+                'one': {
+                    'resource_type': 'test.res.one',
+                    'zim': 'zalt',
+                },
+                'flavor': 'strawberry',
+            },
+            'expected': [
+                {
+                    'resource_type': 'test.res.three',
+                    'one': {
+                        'resource_type': 'test.res.one',
+                        'zim': 'zalt',
+                    },
+                    'flavor': 'strawberry',
+                },
+            ],
+        },
+    ],
+)
+def test_load(params):
+    data = params.get('data')
+    loaded = rlib.load(data)
+    # test round tripping because asserting equality on the
+    # objects is not simple
+    sdata = [obj.to_simplified() for obj in loaded]
+    assert params['expected'] == sdata
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # missing resource_type, can not load
+        {
+            'data': {
+                'zim': 'aaa',
+                'zam': 'bbb',
+            },
+            'exc_type': rlib.MissingResourceTypeError,
+            'error': '',
+        },
+        # bad resource_type, can not load
+        {
+            'data': {
+                'resource_type': 'fred',
+                'zim': 'aaa',
+                'zim': 'aaa',
+                'zam': 'bbb',
+            },
+            'exc_type': rlib.InvalidResourceTypeError,
+            'error': 'fred',
+        },
+        # subtype mismatch - missing
+        {
+            'data': {
+                'resource_type': 'test.res.three',
+                'one': {},
+            },
+            'exc_type': rlib.MissingResourceTypeError,
+            'error': '',
+        },
+        # subtype mismatch - wrong value
+        {
+            'data': {
+                'resource_type': 'test.res.three',
+                'one': {
+                    'resource_type': 'test.foo.flub',
+                    'zim': 'aaa',
+                    'zam': 'bbb',
+                },
+            },
+            'exc_type': rlib.InvalidResourceTypeError,
+            'error': 'test.foo.flub',
+        },
+        # junk field
+        {
+            'data': {
+                'resource_type': 'test.res.three',
+                'one': {
+                    'resource_type': 'test.res.one',
+                    'zim': 'imok',
+                    'zam': object(),
+                },
+            },
+            'exc_type': rlib.InvalidFieldError,
+            'error': 'zam',
+        },
+    ],
+)
+def test_load_error(params):
+    data = params.get('data')
+    with pytest.raises(params['exc_type'], match=params['error']):
+        loaded = rlib.load(data)
