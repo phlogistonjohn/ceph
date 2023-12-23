@@ -120,14 +120,22 @@ class ClusterSettings:
     def validate(self):
         if self.auth_mode == AuthMode.ACTIVE_DIRECTORY:
             if not self.domain_settings:
-                raise ValueError('domain settings are required for active directory mode')
+                raise ValueError(
+                    'domain settings are required for active directory mode'
+                )
             if self.user_group_settings:
-                raise ValueError('user & group settings not supported for active directory mode')
+                raise ValueError(
+                    'user & group settings not supported for active directory mode'
+                )
         if self.auth_mode == AuthMode.USER:
             if not self.user_group_settings:
-                raise ValueError('user & group settings required for user auth mode')
+                raise ValueError(
+                    'user & group settings required for user auth mode'
+                )
             if self.domain_settings:
-                raise ValueError('domain settings not supported for user auth mode')
+                raise ValueError(
+                    'domain settings not supported for user auth mode'
+                )
 
 
 @resourcelib.resource('ceph.smb.cluster')
@@ -148,51 +156,3 @@ class JoinAuth:
     auth_id: str
     intent: Intent = Intent.PRESENT
     values: Optional[JoinAuthValues] = None
-
-
-DEMO = """
----
-resource_type: ceph.smb.cluster
-cluster_id: chacha
-auth_mode: active-directory
-domain_settings:
-  realm: CEPH.SINK.TEST
-  join_sources:
-    - source_type: reference
-      ref: jsrc1
-    - source_type: inline
-      username: Administrator
-      password: fallb4kP4ssw0rd
----
-resource_type: ceph.smb.share
-cluster_id: chacha
-share_id: s1
-cephfs
-  volume: cephfs
-  path: /
----
-resource_type: ceph.smb.share
-cluster_id: chacha
-share_id: s2
-name: My Second Share
-cephfs:
-  volume: cephfs
-  subvolume: cool/beans
----
-resource_type: ceph.smb.share
-cluster_id: chacha
-share_id: s0
-intent: removed
-# deleted this test share
----
-resource_type: ceph.smb.join.auth
-auth_id: bob
-values:
-  username: BobTheAdmin
-  password: someJunkyPassw0rd
----
-resource_type: ceph.smb.join.auth
-auth_id: alice
-intent: removed
-# alice left the company
-"""

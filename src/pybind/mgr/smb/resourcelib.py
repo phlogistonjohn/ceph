@@ -142,8 +142,8 @@ def get_resource(
 
 def load(data: Simplified) -> List[Any]:
     print("LOADD", data)
-    # Given a bare list. Assume it contains loadable objects.
-    if isinstance(data, list):
+    # Given a bare list/iterator. Assume it contains loadable objects.
+    if not isinstance(data, dict):
         return list(chain.from_iterable(load(v) for v in data))
     # Given a "list object"
     if 'resource_type' not in data and 'resources' in data:
