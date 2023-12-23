@@ -374,14 +374,23 @@ def _from_object_field(
     _fso = getattr(innert.target_type, '_from_simplfied_object', None)
     _fss = getattr(innert.target_type, 'from_simplified', None)
     print('__methods__>', _fso, _fss)
-    if _fso and source.data is not None:
-        # _from_simplfied_object is semi-private and supports the direct use
-        # of a source
-        return _fso(tgt)
-    if _fss and source.data is not None:
-        # from_simplified is the fully public version and doesn't know anything
-        # about our special source type
-        return _fss(tgt.data)
+    try:
+        if _fso and source.data is not None:
+            # _from_simplfied_object is semi-private and supports the direct use
+            # of a source
+            return _fso(tgt)
+        if _fss and source.data is not None:
+            # from_simplified is the fully public version and doesn't know anything
+            # about our special source type
+            return _fss(tgt.data)
+    except TypeError:
+        # handle the case of an optional embedded object that is missing
+        # required fields.
+        # TODO: this catches the TypeError raised by calling cls(**kw) in
+        # _from_object, should this be tightened up with a different exc type?
+        if is_optional and extras.embedded:
+            return None
+        raise
     if innert.takes(list, List):
         assert isinstance(tgt.data, list)
         return [_from_object(innert.unwrap(), sv) for sv in tgt.contents()]
