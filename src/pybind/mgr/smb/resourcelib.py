@@ -333,7 +333,7 @@ def _from_object(type_info: _typeinfo, source: _Source) -> Any:
         fields = dataclasses.fields(type_info.target_type)
         _assert_resource_type(type_info, source)
     except TypeError:
-        return _from_scalar(type_info, source)
+        return _from_value(type_info, source)
     kw = {}
     for fld in fields:
         print("from object fld-->", fld.name)
@@ -391,20 +391,29 @@ def _from_object_field(
         if is_optional and extras.embedded:
             return None
         raise
-    if innert.takes(list, List):
-        assert isinstance(tgt.data, list)
-        return [_from_object(innert.unwrap(), sv) for sv in tgt.contents()]
-    if innert.takes(dict, Dict):
-        assert isinstance(tgt.data, dict)
-        kt, vt = innert.unwrap_dict()
-        return {
-            _from_scalar(kt, sk): _from_object(vt, sv)
-            for sk, sv in tgt.dict_contents()
-        }
     try:
-        return _from_scalar(innert, tgt, optional=is_optional)
+        return _from_value(innert, tgt, optional=is_optional)
     except TypeError:
         raise InvalidFieldError(fname)
+
+
+@_xt
+def _from_value(
+    type_info: _typeinfo, source: _Source, optional: bool = False
+) -> Any:
+    if type_info.takes(list, List):
+        assert isinstance(source.data, list)
+        return [
+            _from_object(type_info.unwrap(), sv) for sv in source.contents()
+        ]
+    if type_info.takes(dict, Dict):
+        assert isinstance(source.data, dict)
+        kt, vt = type_info.unwrap_dict()
+        return {
+            _from_scalar(kt, sk): _from_object(vt, sv)
+            for sk, sv in source.dict_contents()
+        }
+    return _from_scalar(type_info, source, optional=optional)
 
 
 @_xt
@@ -432,4 +441,6 @@ def _assert_resource_type(type_info: _typeinfo, source: _Source) -> None:
     except KeyError:
         raise MissingResourceTypeError(source.data)
     if expected_rt != curr_resource_type:
-        raise InvalidResourceTypeError(expected=expected_rt, actual=curr_resource_type)
+        raise InvalidResourceTypeError(
+            expected=expected_rt, actual=curr_resource_type
+        )
