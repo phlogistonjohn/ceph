@@ -97,12 +97,43 @@ class JoinSource:
 
 
 @resourcelib.component()
+class UserGroupSettings:
+    users: List[Dict[str, str]]
+    groups: List[Dict[str, str]]
+
+
+@resourcelib.component()
 class UserGroupSource:
     source_type: UserGroupSourceType
-    users: List[Simplified]
-    groups: List[Simplified]
+    values: Optional[UserGroupSettings] = None
     uri: Annotated[str, _quiet] = ''
     ref: Annotated[str, _quiet] = ''
+
+    def validate(self):
+        if self.source_type == UserGroupSourceType.INLINE:
+            pfx = 'inline User/Group configuration'
+            if self.values is None:
+                raise ValueError(pfx + ' requires values')
+            if self.uri:
+                raise ValueError(pfx + ' does not take a uri')
+            if self.ref:
+                raise ValueError(pfx + ' does not take a ref value')
+        if self.source_type == UserGroupSourceType.HTTP_URI:
+            pfx = 'http User/Group configuration'
+            if not self.uri:
+                raise ValueError(pfx + ' requires a uri')
+            if self.values:
+                raise ValueError(pfx + ' does not take inline values')
+            if self.ref:
+                raise ValueError(pfx + ' does not take a ref value')
+        if self.source_type == UserGroupSourceType.RESOURCE:
+            pfx = 'resource reference User/Group configuration'
+            if not self.ref:
+                raise ValueError(pfx + ' requires a ref value')
+            if self.uri:
+                raise ValueError(pfx + ' does not take a uri')
+            if self.values:
+                raise ValueError(pfx + ' does not take inline values')
 
 
 @resourcelib.component()
@@ -156,3 +187,10 @@ class JoinAuth:
     auth_id: str
     intent: Intent = Intent.PRESENT
     values: Optional[JoinAuthValues] = None
+
+
+@resourcelib.resource('ceph.smb.usersgroups')
+class UsersAndGroups:
+    users_groups_id: str
+    intent: Intent = Intent.PRESENT
+    values: Optional[UserGroupSettings] = None
