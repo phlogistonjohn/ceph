@@ -250,3 +250,321 @@ def test_load_yaml_resource_yaml2():
     assert isinstance(loaded[2], smb.resources.Share)
     assert isinstance(loaded[3], smb.resources.Share)
     assert isinstance(loaded[4], smb.resources.UsersAndGroups)
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # too many slashes in subvolumegroup
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: blat
+share_id: bs1
+name: Bad Share 1
+cephfs:
+  volume: cephfs
+  path: /share1
+  subvolumegroup: foo/bar
+  subvolume: baz
+""",
+            "exc_type": ValueError,
+            "error": "invalid subvolumegroup",
+        },
+        # too many slashes in subvolume
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: blat
+share_id: bs1
+name: Bad Share 1
+cephfs:
+  volume: cephfs
+  path: /share1
+  subvolumegroup: foo
+  subvolume: baz/qqqqq
+""",
+            "exc_type": ValueError,
+            "error": "invalid subvolume",
+        },
+        # too many slashes in subvolume (autosplit)
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: blat
+share_id: bs1
+name: Bad Share 1
+cephfs:
+  volume: cephfs
+  path: /share1
+  subvolume: foo/baz/qqqqq
+""",
+            "exc_type": ValueError,
+            "error": "invalid subvolume",
+        },
+        # missing volume value
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: blat
+share_id: bs1
+name: Bad Share 1
+cephfs:
+  volume: ""
+  path: /share1
+  subvolume: foo
+""",
+            "exc_type": ValueError,
+            "error": "volume",
+        },
+        # missing cluster_id value
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: ""
+share_id: whee
+name: Bad Share 1
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+""",
+            "exc_type": ValueError,
+            "error": "cluster_id",
+        },
+        # missing share_id value
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: blat
+share_id: ""
+name: Bad Share 1
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+""",
+            "exc_type": ValueError,
+            "error": "share_id",
+        },
+        # missing cluster settings
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: narf
+intent: present
+""",
+            "exc_type": ValueError,
+            "error": "cluster settings",
+        },
+        # missing cluster_id
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: ""
+intent: present
+""",
+            "exc_type": ValueError,
+            "error": "cluster_id",
+        },
+        # missing domain settings
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: active-directory
+domain_settings:
+""",
+            "exc_type": ValueError,
+            "error": "active directory",
+        },
+        # extra user/group settings
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: active-directory
+domain_settings:
+  realm: CEPH.SINK.TEST
+  join_sources: []
+user_group_settings:
+  - source_type: resource
+    ref: rhumbausers
+""",
+            "exc_type": ValueError,
+            "error": "not supported",
+        },
+        # missing user/group settings
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+""",
+            "exc_type": ValueError,
+            "error": "required",
+        },
+        # extra domain settings
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: rhumbausers
+domain_settings:
+  realm: CEPH.SINK.TEST
+  join_sources: []
+""",
+            "exc_type": ValueError,
+            "error": "not supported",
+        },
+        # u/g inline missing
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: inline
+""",
+            "exc_type": ValueError,
+            "error": "requires values",
+        },
+        # u/g inline extra uri
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: inline
+    values:
+      users: []
+      groups: []
+    uri: http://foo.bar.example.com/baz.txt
+""",
+            "exc_type": ValueError,
+            "error": "does not take",
+        },
+        # u/g inline extra ref
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: inline
+    values:
+      users: []
+      groups: []
+    ref: xyz
+""",
+            "exc_type": ValueError,
+            "error": "does not take",
+        },
+        # u/g uri missing
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: http_uri
+""",
+            "exc_type": ValueError,
+            "error": "requires",
+        },
+        # u/g uri extra values
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: http_uri
+    values:
+      users: []
+      groups: []
+    uri: http://foo.bar.example.com/baz.txt
+""",
+            "exc_type": ValueError,
+            "error": "does not take",
+        },
+        # u/g uri extra ref
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: http_uri
+    uri: http://boop.example.net
+    ref: xyz
+""",
+            "exc_type": ValueError,
+            "error": "does not take",
+        },
+        # u/g resource missing
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+""",
+            "exc_type": ValueError,
+            "error": "requires",
+        },
+        # u/g resource extra values
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: xyz
+    uri: http://example.net/foo
+""",
+            "exc_type": ValueError,
+            "error": "does not take",
+        },
+        # u/g resource extra resource
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: randolph
+intent: present
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: xyz
+    values:
+      users: []
+      groups: []
+""",
+            "exc_type": ValueError,
+            "error": "does not take",
+        },
+    ],
+)
+def test_load_error(params):
+    import yaml
+
+    data = yaml.safe_load_all(params['yaml'])
+    with pytest.raises(params['exc_type'], match=params['error']):
+        loaded = smb.resourcelib.load(data)

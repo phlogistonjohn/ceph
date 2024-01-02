@@ -81,6 +81,8 @@ class Share:
             self.share = None
 
     def validate(self) -> None:
+        if not self.cluster_id:
+            raise ValueError('cluster_id requires a value')
         if not self.share_id:
             raise ValueError('share_id requires a value')
         if not self.share and self.intent == Intent.PRESENT:
@@ -174,6 +176,12 @@ class Cluster:
     cluster_id: str
     intent: Intent = Intent.PRESENT
     settings: Annotated[Optional[ClusterSettings], _embedded] = None
+
+    def validate(self) -> None:
+        if not self.cluster_id:
+            raise ValueError('cluster_id requires a value')
+        if not self.settings and self.intent == Intent.PRESENT:
+            raise ValueError('cluster settings are required for present intent')
 
 
 @resourcelib.component()
