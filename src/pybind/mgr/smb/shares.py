@@ -9,6 +9,7 @@ from .enums import CephFSStorageProvider, SubSystem, Intent, State
 
 
 SMBShare = str
+'''
 
 
 #@resource.resource('ceph.smb.status.share')
@@ -256,3 +257,4 @@ class SMBShareManager(Protocol):
 
     def configuration(self) -> Simplified:
         ...  # pragma: no cover
+'''

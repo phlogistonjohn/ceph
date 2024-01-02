@@ -8,6 +8,7 @@ from . import shares
 from . import resource
 
 
+'''
 class SMBCluster(Protocol):
     def shares(self) -> shares.SMBShareManager:
         ...  # pragma: no cover
@@ -68,3 +69,4 @@ class FakeSMBClusterManager:
             public_store=self._public_store,
             private_store=self._private_store,
         )
+'''

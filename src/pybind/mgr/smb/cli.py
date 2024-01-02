@@ -13,7 +13,7 @@ class _cmdlet:
         return self._func(*args, **kwargs)
 
 
-class Command:
+class SMBCommand:
     """A combined decorator and descriptor. Sets up the common parts of the
     CLICommand and object formatter.
     As a descriptor, it returns objects that can be called and wrap the
@@ -22,7 +22,7 @@ class Command:
 
     Example:
     >>> class Example:
-    ...     @Command('share', 'foo', perm='r')
+    ...     @SMBCommand('share foo', perm='r')
     ...     def foo(self):
     ...         return {'test': 1}
     ...
@@ -30,14 +30,13 @@ class Command:
     >>> assert ex.foo() == {'test': 1}
     >>> assert ex.foo.command(format='yaml') == (0, "test: 1\\n", "")
     """
-    def __init__(self, scope: str, suffix: str, perm: str) -> None:
-        self._scope = scope
-        self._suffix = suffix
+    def __init__(self, name, perm: str) -> None:
+        self._name = name
         self._perm = perm
 
-    def __call__(self, func: Callable) -> 'Command':
+    def __call__(self, func: Callable) -> 'SMBCommand':
         self._func = func
-        cc = CLICommand(f'smb {self._scope} {self._suffix}', perm=self._perm)
+        cc = CLICommand(f'smb {self._name}', perm=self._perm)
         rsp = object_format.Responder()
         self._command = cc(rsp(func))
         return self

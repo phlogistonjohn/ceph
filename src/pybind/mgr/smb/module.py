@@ -10,12 +10,11 @@ from . import cli
 from . import cluster
 from . import shares
 from . import config_store
+from .proto import ConfigStore
+from . import resourcelib
 
 
 log = logging.getLogger(__name__)
-
-CLUSTER = 'cluster'
-SHARE = 'share'
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
@@ -25,38 +24,32 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         private_store = kwargs.pop('private_store', None)
         public_store = kwargs.pop('public_store', None)
         super().__init__(*args, **kwargs)
-        self._init_stores(private_store, public_store)
-
-    def _init_stores(
-        self,
-        private_store: Optional[config_store.ConfigStore],
-        public_store: Optional[config_store.ConfigStore],
-    ) -> None:
         self._private_store = private_store or config_store.FakeConfigStore()
         self._public_store = public_store or config_store.FakeConfigStore()
 
-    def _clusters(self) -> cluster.SMBClusterManager:
+    def _clusters(self) -> 'cluster.SMBClusterManager':
         return cluster.FakeSMBClusterManager(
             private_store=self._private_store,
             public_store=self._public_store,
         )
 
-    @cli.Command(CLUSTER, 'ls', perm='r')
+    @cli.SMBCommand('apply', perm='rw')
+    def apply(self, inbuf: str) -> 'Results':
+        return self._handler.apply_all(resourcelib.load(inbuf))
+
+    @cli.SMBCommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
-        return list(self._clusters())
+        return [c.cluster_id for c in self._handler.clusters()]
 
-    @cli.Command(SHARE, 'ls', perm='r')
+    @cli.SMBCommand('share ls', perm='r')
     def share_ls(self, cluster_id: str) -> List[Dict[str, str]]:
-        return [
-            {'share_id': s.share_id, 'name': s.name, 'path': s.path}
-            for s in self._clusters()[cluster_id].shares()
-        ]
+        return [s.share_id for s in self._handler.shares() if s.cluster_id == cluster_id]
 
-    @cli.Command(SHARE, 'info', perm='r')
+    @cli.SMBCommand('share info', perm='r')
     def share_info(self, cluster_id: str) -> Dict[str, str]:
         return {}
 
-    @cli.Command(SHARE, 'create', perm='rw')
+    @cli.SMBCommand('share create', perm='rw')
     def share_create(
         self,
         cluster_id: str,
@@ -66,32 +59,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         name: str = '',
         subvolume: str = '',
         readonly: bool = False,
-    ) -> shares.SMBShareStatus:
-        to_create = shares.share_to_create(
+    ) -> 'shares.SMBShareStatus':
+        share = shares.present_share(
+            cluster_id=cluster_id,
             share_id=share_id,
             name=name,
             path=path,
-            subsystem=shares.SubSystem.CEPHFS,
             volume=cephfs_volume,
             subvolume=subvolume,
             readonly=readonly,
         )
-        smb_cluster = self._clusters()[cluster_id]
-        return smb_cluster.shares().apply([to_create]).one()
+        return self._handler.apply(share)
 
-    @cli.Command(SHARE, 'rm', perm='rw')
-    def share_rm(self, cluster_id: str, name: str) -> shares.SMBShareStatus:
-        to_delete = shares.share_to_delete(name)
-        smb_cluster = self._clusters()[cluster_id]
-        return smb_cluster.shares().apply([to_delete]).one()
+    @cli.SMBCommand('share rm', perm='rw')
+    def share_rm(self, cluster_id: str, share_id: str) -> 'shares.SMBShareStatus':
+        share = shares.removed_share(cluster_id, share_id)
+        return self._handler.apply(share)
 
-    @cli.Command(SHARE, 'apply', perm='rw')
-    def share_apply(self, cluster_id: str, inbuf: str) -> shares.ApplyResults:
-        share_configs = shares.from_text(inbuf)
-        smb_cluster = self._clusters()[cluster_id]
-        return smb_cluster.shares().apply(share_configs)
-
-    @cli.Command(SHARE, 'dump-config', perm='rw')
+    @cli.SMBCommand('cluster get-config', perm='rw')
     def share_dump_config(self, cluster_id: str) -> Dict[str, Any]:
-        smb_cluster = self._clusters()[cluster_id]
-        return smb_cluster.shares().configuration()
+        return self._handler.generate_config(cluster_id)
