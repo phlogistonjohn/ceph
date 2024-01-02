@@ -158,7 +158,7 @@ intent: removed
 """
 
 
-def test_load_yaml_resource():
+def test_load_yaml_resource_yaml1():
     import yaml
 
     loaded = smb.resourcelib.load(yaml.safe_load_all(YAML1))
@@ -183,3 +183,70 @@ def test_load_yaml_resource():
     assert isinstance(loaded[3], smb.resources.Share)
     assert isinstance(loaded[4], smb.resources.JoinAuth)
     assert isinstance(loaded[5], smb.resources.JoinAuth)
+
+
+YAML2 = """
+resource_type: ceph.smb.cluster
+cluster_id: rhumba
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: rhumbausers
+custom_global_config:
+  "hostname lookups": yes
+---
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: us1
+name: User Share 1
+cephfs:
+  volume: cephfs
+  path: /share1
+  subvolumegroup: sg1
+  subvolume: chevron
+---
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: us2
+share:
+    name: Useful Stuff
+    cephfs:
+      volume: volume2
+      subvolume: foo/bar
+      path: /things/and/stuff
+    custom_config:
+      "hosts allow": "adminbox"
+---
+# the 'nope' share should not exist
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: nope
+intent: removed
+---
+resource_type: ceph.smb.usersgroups
+users_groups_id: rhumbausers
+intent: present
+values:
+  users:
+    - name: charlie
+      password: 7unaF1sh
+    - name: lucky
+      password: CH4rmz
+    - name: jgg
+      password: h0H0h0_gg
+  groups:
+    - name: mascots
+"""
+
+
+def test_load_yaml_resource_yaml2():
+    import yaml
+
+    loaded = smb.resourcelib.load(yaml.safe_load_all(YAML2))
+    assert len(loaded) == 5
+
+    assert isinstance(loaded[0], smb.resources.Cluster)
+    assert isinstance(loaded[1], smb.resources.Share)
+    assert isinstance(loaded[2], smb.resources.Share)
+    assert isinstance(loaded[3], smb.resources.Share)
+    assert isinstance(loaded[4], smb.resources.UsersAndGroups)
