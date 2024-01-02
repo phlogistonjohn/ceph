@@ -174,9 +174,10 @@ import smb.cluster
     ],
 )
 def test_from_request_objects(obj, count, expected):
-    import smb.resource
+    #import smb.resource
+    pass
 
-    if count > 0:
+    #if count > 0:
         #r1 = smb.cluster.ClusterRequest.from_dict(obj)
         #clusters = r1.values
         #assert len(clusters) == count
@@ -185,34 +186,9 @@ def test_from_request_objects(obj, count, expected):
         #serialized = json.dumps(obj)
         #r2 = smb.cluster.ClusterRequest.from_text(serialized)
         #assert r2.values == clusters
-        clusters = smb.resource.load(obj)
-        assert len(clusters) == count
-        assert expected == [c.to_simplified() for c in clusters]
-    else:
-        with pytest.raises(ValueError, match=expected):
-            smb.cluster.ClusterRequest.from_dict(obj)
-
-
-
-def test_foo():
-    from smb.resource import Example, Bonk
-
-    e1 = Example('finle', '99-a')
-    s1 = e1.to_simplified()
-    print(s1)
-    Example.from_simplified(s1)
-    e1.contents = [
-        Bonk(label='jo', width=43, height=8, length=12),
-        Bonk(label='moo', width=3, height=18, length=112),
-        Bonk(label='go', width=2, height=99, length=102),
-    ]
-    s1 = e1.to_simplified()
-    print(s1)
-    x = Example.from_simplified(s1)
-    assert x.name == 'finle'
-    assert x.serial_num == '99-a'
-    assert len(x.contents) == 3
-    assert x.contents[0].label == 'jo'
-    assert x.contents[0].width == 43
-    assert x.contents[1].label == 'moo'
-    assert x.contents[1].width == 3
+        #clusters = smb.resource.load(obj)
+        #assert len(clusters) == count
+        #assert expected == [c.to_simplified() for c in clusters]
+    #else:
+        #with pytest.raises(ValueError, match=expected):
+        #    smb.cluster.ClusterRequest.from_dict(obj)

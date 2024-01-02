@@ -5,202 +5,13 @@ import pathlib
 from . import config_store
 from .proto import Protocol, Simplified, SimplifiedList
 from .enums import CephFSStorageProvider, SubSystem, Intent, State
-from . import resource
 
 
 
-_embedded = resource.ResourceOptions(embedded=True)
-_quiet = resource.ResourceOptions(keep_false=False)
+SMBShare = str
 
 
-class MissingRequirement(ValueError):
-    pass
-
-
-@resource.component()
-class CephFSStorage:
-    volume: str
-    path: str = '/'
-    subvolumegroup: Annotated[str, _quiet] = ''
-    subvolume: Annotated[str, _quiet] = ''
-    provider: CephFSStorageProvider = CephFSStorageProvider.KERNEL_MOUNT
-
-    def __post_init__(self) -> None:
-        if '/' in self.subvolume and not self.subvolumegroup:
-            try:
-                self.subvolumegroup, self.subvolume = self.subvolume.split('/')
-            except ValueError:
-                raise ValueError('invalid subvolume value: {self.subvolume!r}')
-
-    def validate(self) -> None:
-        if not self.volume:
-            raise ValueError('volume requires a value')
-        if '/' in self.subvolumegroup:
-            raise ValueError('invalid subvolumegroup value: {self.subvolumegroup!r}')
-        if '/' in self.subvolume:
-            raise ValueError('invalid subvolume value: {self.subvolume!r}')
-
-    def absolute_path(self, cephfs_factory: Any) -> str:
-        out = pathlib.Path('/')
-        if self.subvolumegroup or self.subvolume:
-            cephfs = cephfs_factory(self.volume)
-            prefix = cephfs.getpath(self.subvolumegroup, self.subvolume)
-            out = out / prefix
-        out = out / self.path
-        return str(out)
-
-    def xxx_to_simplified(self) -> Simplified:
-        out: Simplified = {'volume': self.volume}
-        if self.subvolumegroup or self.subvolume:
-            out['subvolumegroup'] = self.subvolumegroup
-            out['subvolume'] = self.subvolume
-        out['path'] = self.path
-        out['provider'] = str(self.provider)
-        return out
-
-    @classmethod
-    def from_options(
-        cls, *, volume: str, subvolume: str = '', path: str = ''
-    ) -> 'CephFSStorage':
-        if not volume:
-            raise MissingRequirement('volume')
-        path = path or '/'
-
-        subg = subv = ''
-        if '/' in subvolume:
-            subg, subv = subvolume.split('/', 1)
-            if '/' in subv:
-                raise ValueError('subvolume field may only contain one slash')
-        elif subvolume:
-            subg = ''
-            subv = subvolume
-
-        return cls(
-            volume=volume,
-            subvolumegroup=subg,
-            subvolume=subv,
-            path=path,
-            provider=CephFSStorageProvider.KERNEL_MOUNT,
-        )
-
-    @classmethod
-    def xxx_from_dict(cls, data: Simplified) -> 'CephFSStorage':
-        try:
-            volume = data['volume']
-        except KeyError as err:
-            raise MissingRequirement(str(err))
-        return cls.from_options(
-            volume=volume,
-            subvolume=data.get('subvolume', ''),
-            path=data.get('path', ''),
-        )
-
-
-_alt_share_id = resource.ResourceOptions(alt_keys=['share_id'])
-
-
-@resource.component()
-class SMBShareSettings:
-    name: Annotated[str, _alt_share_id]
-    path: str = ''
-    readonly: bool = False
-    browseable: bool = True
-    subsystem: SubSystem = SubSystem.CEPHFS
-    cephfs: Optional[CephFSStorage] = None
-
-    def validate(self) -> None:
-        if self.subsystem == SubSystem.CEPHFS and not self.cephfs:
-            raise ValueError('cephfs configuration missing')
-
-    def xxx_to_simplified(self) -> Simplified:
-        assert self.cephfs is not None
-        out: Simplified = {
-            'share_id': self.share_id,
-            'name': self.name,
-            'path': self.path,
-            'readonly': self.readonly,
-            'browseable': self.browseable,
-            'subsystem': str(self.subsystem),
-            'cephfs': self.cephfs.to_simplified(),
-        }
-        return out
-
-    @classmethod
-    def from_options(
-        cls,
-        *,
-        share_id: str,
-        name: str = '',
-        path: str = '',
-        readonly: bool = False,
-        subsystem: Optional[SubSystem] = None,
-        cephfs: Optional[CephFSStorage] = None,
-    ) -> 'SMBShare':
-        if not share_id:
-            raise MissingRequirement('share_id is required')
-        if not name:
-            name = share_id
-        assert subsystem
-        assert cephfs
-
-        return cls(
-            share_id=share_id,
-            name=name,
-            path=path,
-            readonly=readonly,
-            subsystem=subsystem,
-            cephfs=cephfs,
-        )
-
-    @classmethod
-    def xxx_from_dict(cls, data: Simplified) -> 'SMBShare':
-        if 'cephfs' not in data:
-            raise MissingRequirement('missing cephfs storage configuration')
-        cephfs = CephFSStorage.from_dict(data['cephfs'])
-        try:
-            share_id = data['share_id']
-        except KeyError as err:
-            raise MissingRequirement(str(err))
-        return cls.from_options(
-            share_id=share_id,
-            name=data.get('name', ''),
-            path=data.get('path', ''),
-            readonly=data.get('readonly', False),
-            # browseable=data.get('browseable', True),
-            subsystem=SubSystem.CEPHFS,
-            cephfs=cephfs,
-        )
-
-
-class SMBShareStub(SMBShareSettings):
-    def __init__(self, share_id: str, name: str = '') -> None:
-        super().__init__(share_id, name)
-
-    def to_simplified(self) -> Simplified:
-        raise NotImplementedError('invalid to serialize')
-
-
-@resource.resource('ceph.smb.share')
-class SMBShare:
-    share_id: str
-    intent: Intent = Intent.PRESENT
-    share: Annotated[SMBShareSettings, _embedded] = None
-
-    @classmethod
-    def www_from_dict(cls, data: Simplified) -> 'SMBShare':
-        return cls(
-            intent=Intent(data.get('intent', Intent.PRESENT)),
-            share=SMBShare.from_dict(data),
-        )
-
-    def validate(self) -> None:
-        if not self.share_id:
-            raise ValueError('share_id requires a value')
-        if not self.share and self.intent == Intent.PRESENT:
-            raise ValueError('share settings are required for present intent')
-
-
-@resource.resource('ceph.smb.status.share')
+#@resource.resource('ceph.smb.status.share')
 class SMBShareStatus:
     share: SMBShare
     # state is a str so we can report one-off custom states if needed,
@@ -414,9 +225,10 @@ def share_to_delete(share_id: str) -> SMBShare:
 
 
 def from_text(buf: str) -> List[SMBShare]:
+    pass
     # TODO: make this yaml capable and sensible
-    data = json.loads(buf)
-    return resource.load(data)
+    # data = json.loads(buf)
+    # return resource.load(data)
     # return from_request_objects(data)
 
 
