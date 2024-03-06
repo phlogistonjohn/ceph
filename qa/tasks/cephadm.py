@@ -4,7 +4,6 @@ Ceph cluster task, deployed via cephadm orchestrator
 import argparse
 import configobj
 import contextlib
-import functools
 import json
 import logging
 import os
@@ -12,8 +11,6 @@ import re
 import time
 import uuid
 import yaml
-
-import jinja2
 
 from copy import deepcopy
 from io import BytesIO, StringIO
@@ -29,6 +26,7 @@ from teuthology.exceptions import ConfigError, CommandFailedError
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.util import chacra
+from tasks import template
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -1382,7 +1380,7 @@ def shell(ctx, config):
         args.extend(['-v', k])
 
     config = _expand_roles(ctx, config)
-    config = _template_transform(ctx, config, config)
+    config = template.transform(ctx, config, config)
     for role, cmd in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
@@ -1436,7 +1434,7 @@ def exec(ctx, config):
                     'bash',
                     '-ex',
                     '-c',
-                    _template_transform(ctx, config, c)],
+                    template.transform(ctx, config, c)],
                 )
 
 
@@ -1462,7 +1460,7 @@ def apply(ctx, config):
     cluster_name = config.get('cluster', 'ceph')
 
     specs = config.get('specs', [])
-    specs = _template_transform(ctx, config, specs)
+    specs = template.transform(ctx, config, specs)
     y = yaml.dump_all(specs)
 
     log.info(f'Applying spec(s):\n{y}')
