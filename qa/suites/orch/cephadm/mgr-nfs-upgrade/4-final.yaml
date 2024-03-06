@@ -1,5 +1,5 @@
 tasks:
-- vip.exec:
+- exec:
     host.a:
       - umount /mnt/foo
 - cephadm.shell:
