@@ -8,7 +8,7 @@ template.exec:
     - echo {{ctx.foo.bar}}
 ```
 
-Functions like template_transform allow you to use this templating support
+Functions like transform allow you to use this templating support
 as a building block in your own .py files as well.
 
 By default a template can access the variables `ctx` and `config` - these are
@@ -16,7 +16,7 @@ mapped to the first two arguments of this function and should match the ctx and
 config passed to an individual task. Additional vars `cluster` and `VIP<N>`
 (eg. VIP0, VIP1), `VIPPREFIXLEN`, `VIPSUBNET` are available for convenience
 and/or backwards compatiblity with existing tests. Finally, keyword args may be
-passed (via `ctx_vars`) to template_transform to add specific top-level
+passed (via `ctx_vars`) to transform to add specific top-level
 variables to extend the templating for specific use-cases.
 
 Templates can access filters that transform on value into another. Currently,
@@ -90,7 +90,7 @@ def _vip_vars(rctx):
             rctx[f"VIP{idx}"] = str(vip)
 
 
-def template_transform(ctx, config, target, **ctx_vars):
+def transform(ctx, config, target, **ctx_vars):
     """Apply jinja2 based templates to strings within the target object,
     returning a transformed target. Target objects may be a list or dict or
     str.
@@ -156,6 +156,6 @@ def exec(ctx, config):
                     "bash",
                     "-ex",
                     "-c",
-                    template_transform(ctx, config, c, role=role),
+                    transform(ctx, config, c, role=role),
                 ],
             )
