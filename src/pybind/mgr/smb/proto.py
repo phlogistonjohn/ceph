@@ -36,7 +36,7 @@ elif TYPE_CHECKING:  # pragma: no cover
     from typing_extensions import Self
 else:  # pragma: no cover
     # fallback type that should be ignored at runtime
-    Self = object()  # type: ignore
+    Self = Any  # type: ignore
 
 
 Simplified = Dict[str, Any]
