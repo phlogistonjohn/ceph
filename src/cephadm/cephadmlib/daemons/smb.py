@@ -437,6 +437,7 @@ class SMB(ContainerDaemonForm):
         etc_samba_ctr = str(data_dir / 'etc-samba-container')
         lib_samba = str(data_dir / 'lib-samba')
         run_samba = str(data_dir / 'run')
+        srv = str(data_dir / 'srv')
         config = str(data_dir / 'config')
         keyring = str(data_dir / 'keyring')
         mounts[etc_samba_ctr] = '/etc/samba/container:z'
@@ -444,6 +445,7 @@ class SMB(ContainerDaemonForm):
         mounts[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
         mounts[config] = '/etc/ceph/ceph.conf:z'
         mounts[keyring] = '/etc/ceph/keyring:z'
+        mounts[srv] = '/srv:shared'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -457,5 +459,6 @@ class SMB(ContainerDaemonForm):
         file_utils.makedirs(ddir / 'etc-samba-container', uid, gid, 0o770)
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o770)
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
+        file_utils.makedirs(ddir / 'srv', uid, gid, 0o770)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
