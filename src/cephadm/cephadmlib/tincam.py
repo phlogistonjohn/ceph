@@ -1,20 +1,40 @@
 """tincam is the tiny cephfs auto mounter
+
+Execute it inside a container. Example:
+# podman run -d --name=tincam \
+    --ipc=host --net=host --privileged \
+    -v /etc/hosts:/etc/hosts:ro \
+    -v /etc/ceph/ceph.conf:/etc/ceph/ceph.conf:z \
+    -v /etc/ceph//ceph.client.admin.keyring:/etc/ceph/ceph.keyring:z \
+    -v /srv:/srv:shared \
+    -v /lib/modules:/lib/modules:ro \
+    -v /usr/local/bin/:/usr/local/bin:ro \
+    --entrypoint python3 \
+    quay.io/ceph/ceph:dev \
+    /usr/local/bin/tincam.py \
+    --interval=30 \
+    --auto-cephfs
 """
 from typing import Optional, List, Any
 
 import argparse
-import time
-import json
-import pathlib
-import subprocess
 import errno
+import json
 import logging
+import pathlib
+import signal
+import subprocess
+import time
 
 
 logger = logging.getLogger()
 
 
 ROOT_DIR = '/srv'
+
+
+class Terminate(Exception):
+    pass
 
 
 class Request:
@@ -201,6 +221,11 @@ def main() -> None:
 
     logger.warning('cli: %s', cli)
 
+    def _term(_sig: int, _: Optional[Any]) -> None:
+        raise Terminate()
+
+    signal.signal(signal.SIGTERM, _term)
+
     cleanup_volumes = cli.cleanup
     root = pathlib.Path(cli.root)
     try:
@@ -210,15 +235,19 @@ def main() -> None:
             if not cli.interval:
                 break
             time.sleep(cli.interval)
-    except Exception:
-        logger.warning('!!!!')
+    except (Terminate, KeyboardInterrupt):
+        logger.info('Stopping main loop now')
+        cleanup_volumes = True
+    except Exception as err:
+        logger.error('unmounting volumes on error: %s', err)
         unmount_volumes(root=root)
         raise
-    except KeyboardInterrupt:
-        cleanup_volumes = True
 
     if cleanup_volumes:
+        logger.info('Peforming volume cleanup')
         unmount_volumes(root=root)
+        time.sleep(0.1)  # wait briefly after unmount before exiting
+    logger.info('Exiting successfully')
 
 
 if __name__ == '__main__':
