@@ -118,7 +118,7 @@ def unmount_volumes(root: pathlib.Path) -> None:
     update_mounts([], root)
 
 
-def get_requests(cli: Any) -> List[Request]:
+def get_requests(cli: Any, root: pathlib.Path) -> List[Request]:
     requests: List[Request] = []
     source = getattr(cli, 'source', None)
     if source:
@@ -128,6 +128,8 @@ def get_requests(cli: Any) -> List[Request]:
     options = (getattr(cli, 'options', '') or '').split(',')
     if what and where:
         requests.append(Request(what, where, options))
+    if getattr(cli, 'auto_cephfs', False):
+        requests += discover_cephfs(root, cli.discover_user)
     return requests
 
 
@@ -150,11 +152,38 @@ def read_source(source_path: pathlib.Path) -> List[Request]:
     return requests
 
 
+def discover_cephfs(root: pathlib.Path, user: str) -> List[Request]:
+    import rados
+
+    mcmd = json.dumps({'prefix': 'fs volume ls'})
+    with rados.Rados(conffile=rados.Rados.DEFAULT_CONF_FILES) as rc:
+        ret, out, err = rc.mon_command(mcmd, b'')
+        logger.debug('fs-volume-ls response: %r %r %r', ret, out, err)
+    if ret != 0:
+        raise RuntimeError(err)
+    values = json.loads(out.decode('utf8'))
+    assert isinstance(values, list)
+    reqs = []
+    for value in values:
+        assert isinstance(value, dict)
+        name = value['name']
+        reqs.append(
+            Request(
+                what=f'{user}@.{name}=/',
+                where=root / name,
+                options=None,
+            )
+        )
+    return reqs
+
+
 def cli_arguments(parser: Any) -> None:
     parser.add_argument('--cleanup', action='store_true')
     parser.add_argument('--interval', default=0, type=int)
     parser.add_argument('--root', default=ROOT_DIR)
     parser.add_argument('--source', nargs='?')
+    parser.add_argument('--auto-cephfs', action='store_true')
+    parser.add_argument('--discover-user', default='admin')
     parser.add_argument('--options', '-o')
     parser.add_argument('what', nargs='?')
     parser.add_argument('where', nargs='?')
@@ -176,7 +205,7 @@ def main() -> None:
     root = pathlib.Path(cli.root)
     try:
         while True:
-            reqs = get_requests(cli)
+            reqs = get_requests(cli, root=root)
             update_mounts(reqs, root=root)
             if not cli.interval:
                 break
