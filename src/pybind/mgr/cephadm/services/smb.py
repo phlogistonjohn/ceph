@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Iterator, List, Tuple, cast
+from typing import Any, Dict, Iterator, List, Tuple, Union, cast
 
 from ceph.deployment.service_spec import ServiceSpec, SMBSpec
 
@@ -103,7 +103,7 @@ class SMBService(CephService):
 
     def _ceph_config_and_keyring_for(
         self, smb_spec: SMBSpec, daemon_id: str, ceph_users: List[str]
-    ) -> Dict[str, str]:
+    ) -> Dict[str, Union[str, List[str]]]:
         ackc = self._allow_config_key_command(smb_spec.cluster_id)
         wanted_caps = ['mon', f'allow r, {ackc}']
         pools = list(self._pools_in_spec(smb_spec))
@@ -121,4 +121,5 @@ class SMBService(CephService):
             'config': self.mgr.get_minimal_ceph_conf(),
             'keyring': keyring,
             'config_auth_entity': entity,
+            'fs_auth_entities': ceph_users,
         }
