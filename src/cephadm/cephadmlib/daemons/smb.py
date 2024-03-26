@@ -34,6 +34,7 @@ logger = logging.getLogger()
 class Features(enum.Enum):
     DOMAIN = 'domain'
     CLUSTERED = 'clustered'
+    FSMOUNTS = 'fsmounts'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -52,6 +53,7 @@ class Config:
     debug_delay: int
     domain_member: bool
     clustered: bool
+    fsmounts: bool
     join_sources: List[str]
     custom_dns: List[str]
     smb_port: int
@@ -65,6 +67,7 @@ class Config:
         source_config: str,
         domain_member: bool,
         clustered: bool,
+        fsmounts: bool = False,
         samba_debug_level: int = 0,
         debug_delay: int = 0,
         join_sources: Optional[List[str]] = None,
@@ -77,6 +80,7 @@ class Config:
         self.source_config = source_config
         self.domain_member = domain_member
         self.clustered = clustered
+        self.fsmounts = fsmounts
         self.samba_debug_level = samba_debug_level
         self.debug_delay = debug_delay
         self.join_sources = join_sources or []
@@ -104,6 +108,10 @@ def _container_dns_args(cfg: Config) -> List[str]:
 
 
 class SambaContainerCommon:
+    image: Optional[str] = None
+    entrypoint: Optional[str] = None
+    privileged: bool = False
+
     def __init__(
         self,
         cfg: Config,
@@ -192,6 +200,31 @@ class ConfigWatchContainer(SambaContainerCommon):
         return super().args() + ['update-config', '--watch']
 
 
+class FSMountContainer(SambaContainerCommon):
+    def __init__(
+        self,
+        cfg: Config,
+        *,
+        ceph_image: str = 'quay.io/phlogistonjohn/ceph:dev',
+    ) -> None:
+        super().__init__(cfg)
+        self.entrypoint = 'bash'
+        self.image = ceph_image
+
+    def name(self) -> str:
+        return 'fsmount'
+
+    def args(self) -> List[str]:
+        return [
+            '-c',
+            (
+                'unzip -o /usr/sbin/cephadm cephadmlib/tincam.py'
+                ' && exec python3 cephadmlib/tincam.py'
+                '  --interval=30  --auto-cephfs'
+            ),
+        ]
+
+
 class ContainerLayout:
     init_containers: List[SambaContainerCommon]
     primary: SambaContainerCommon
@@ -270,6 +303,7 @@ class SMB(ContainerDaemonForm):
             custom_dns=custom_dns,
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,
+            fsmounts=Features.FSMOUNTS.value in instance_features,
             samba_debug_level=6,
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
@@ -322,6 +356,9 @@ class SMB(ContainerDaemonForm):
             init_ctrs.append(MustJoinContainer(self._cfg))
             ctrs.append(WinbindContainer(self._cfg))
 
+        if self._cfg.fsmounts:
+            ctrs.append(FSMountContainer(self._cfg))
+
         smbd = SMBDContainer(self._cfg)
         self._cached_layout = ContainerLayout(init_ctrs, smbd, ctrs)
         return self._cached_layout
@@ -373,16 +410,19 @@ class SMB(ContainerDaemonForm):
         identity = DaemonSubIdentity.from_parent(
             self.identity, smb_ctr.name()
         )
+        image = smb_ctr.image or ctx.image or self.default_image
+        entrypoint = smb_ctr.entrypoint or ''
         return SidecarContainer(
             ctx,
-            entrypoint='',
-            image=ctx.image or self.default_image,
+            entrypoint=entrypoint,
+            image=image,
             identity=identity,
             container_args=container_args,
             args=smb_ctr.args(),
             envs=smb_ctr.envs_list(),
             volume_mounts=volume_mounts,
             init=False,
+            privileged=smb_ctr.privileged,
             remove=True,
         )
 
@@ -437,7 +477,6 @@ class SMB(ContainerDaemonForm):
         etc_samba_ctr = str(data_dir / 'etc-samba-container')
         lib_samba = str(data_dir / 'lib-samba')
         run_samba = str(data_dir / 'run')
-        srv = str(data_dir / 'srv')
         config = str(data_dir / 'config')
         keyring = str(data_dir / 'keyring')
         mounts[etc_samba_ctr] = '/etc/samba/container:z'
@@ -445,7 +484,9 @@ class SMB(ContainerDaemonForm):
         mounts[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
         mounts[config] = '/etc/ceph/ceph.conf:z'
         mounts[keyring] = '/etc/ceph/keyring:z'
-        mounts[srv] = '/srv:shared'
+        if self._cfg.fsmounts:
+            srv_dir = str(data_dir / 'srv')
+            mounts[srv_dir] = '/srv:shared'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -459,6 +500,7 @@ class SMB(ContainerDaemonForm):
         file_utils.makedirs(ddir / 'etc-samba-container', uid, gid, 0o770)
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o770)
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
-        file_utils.makedirs(ddir / 'srv', uid, gid, 0o770)
+        if self._cfg.fsmounts:
+            file_utils.makedirs(ddir / 'srv', uid, gid, 0o771)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
