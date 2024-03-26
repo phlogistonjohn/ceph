@@ -228,7 +228,7 @@ class FSMountContainer(SambaContainerCommon):
                 ' && exec python3 cephadmlib/tincam.py'
                 ' --interval=30'
                 ' --auto-cephfs'
-                ' --discover-user={entity}'
+                f' --discover-user={entity}'
             ),
         ]
 
