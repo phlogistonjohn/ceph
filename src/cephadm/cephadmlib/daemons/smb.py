@@ -213,6 +213,7 @@ class FSMountContainer(SambaContainerCommon):
         super().__init__(cfg)
         self.entrypoint = 'bash'
         self.image = ceph_image
+        self.privileged = True
 
     def name(self) -> str:
         return 'fsmount'
