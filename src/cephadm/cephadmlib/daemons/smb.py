@@ -58,6 +58,7 @@ class Config:
     custom_dns: List[str]
     smb_port: int
     ceph_config_entity: str
+    fs_auth_entities: List[str]
     vhostname: str
 
     def __init__(
@@ -74,6 +75,7 @@ class Config:
         custom_dns: Optional[List[str]] = None,
         smb_port: int = 0,
         ceph_config_entity: str = 'client.admin',
+        fs_auth_entities: Optional[List[str]] = None,
         vhostname: str = '',
     ) -> None:
         self.instance_id = instance_id
@@ -87,6 +89,7 @@ class Config:
         self.custom_dns = custom_dns or []
         self.smb_port = smb_port
         self.ceph_config_entity = ceph_config_entity
+        self.fs_auth_entities = fs_auth_entities or []
         self.vhostname = vhostname
 
     def __str__(self) -> str:
@@ -215,12 +218,17 @@ class FSMountContainer(SambaContainerCommon):
         return 'fsmount'
 
     def args(self) -> List[str]:
+        entity = self.cfg.fs_auth_entities[0]
+        if entity.startswith('client.'):
+            entity = entity.split('.', 1)[-1]
         return [
             '-c',
             (
                 'unzip -o /usr/sbin/cephadm cephadmlib/tincam.py'
                 ' && exec python3 cephadmlib/tincam.py'
-                '  --interval=30  --auto-cephfs'
+                ' --interval=30'
+                ' --auto-cephfs'
+                ' --discover-user={entity}'
             ),
         ]
 
@@ -275,6 +283,7 @@ class SMB(ContainerDaemonForm):
         instance_features = configs.get('features', [])
         files = data_utils.dict_get(configs, 'files', {})
         ceph_config_entity = configs.get('config_auth_entity', '')
+        fs_auth_entities = configs.get('fs_auth_entities', [])
         vhostname = configs.get('virtual_hostname', '')
 
         if not instance_id:
@@ -307,6 +316,7 @@ class SMB(ContainerDaemonForm):
             samba_debug_level=6,
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
+            fs_auth_entities=fs_auth_entities,
             vhostname=vhostname,
         )
         self._files = files
