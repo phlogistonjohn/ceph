@@ -149,7 +149,7 @@ def get_requests(cli: Any, root: pathlib.Path) -> List[Request]:
     if what and where:
         requests.append(Request(what, where, options))
     if getattr(cli, 'auto_cephfs', False):
-        requests += discover_cephfs(root, cli.discover_user)
+        requests += discover_cephfs(root, cli.api_user, cli.fs_user)
     return requests
 
 
@@ -172,11 +172,15 @@ def read_source(source_path: pathlib.Path) -> List[Request]:
     return requests
 
 
-def discover_cephfs(root: pathlib.Path, user: str) -> List[Request]:
+def discover_cephfs(
+    root: pathlib.Path, api_user: str, fs_user: str
+) -> List[Request]:
     import rados
 
     mcmd = json.dumps({'prefix': 'fs volume ls'})
-    with rados.Rados(conffile=rados.Rados.DEFAULT_CONF_FILES) as rc:
+    with rados.Rados(
+        rados_id=api_user, conffile=rados.Rados.DEFAULT_CONF_FILES
+    ) as rc:
         ret, out, err = rc.mon_command(mcmd, b'')
         logger.debug('fs-volume-ls response: %r %r %r', ret, out, err)
     if ret != 0:
@@ -189,7 +193,7 @@ def discover_cephfs(root: pathlib.Path, user: str) -> List[Request]:
         name = value['name']
         reqs.append(
             Request(
-                what=f'{user}@.{name}=/',
+                what=f'{fs_user}@.{name}=/',
                 where=root / name,
                 options=None,
             )
@@ -203,7 +207,8 @@ def cli_arguments(parser: Any) -> None:
     parser.add_argument('--root', default=ROOT_DIR)
     parser.add_argument('--source', nargs='?')
     parser.add_argument('--auto-cephfs', action='store_true')
-    parser.add_argument('--discover-user', default='admin')
+    parser.add_argument('--api-user', default='admin')
+    parser.add_argument('--fs-user', default='admin')
     parser.add_argument('--options', '-o')
     parser.add_argument('what', nargs='?')
     parser.add_argument('where', nargs='?')
