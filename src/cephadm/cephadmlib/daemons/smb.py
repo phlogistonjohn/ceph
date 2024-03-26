@@ -218,9 +218,12 @@ class FSMountContainer(SambaContainerCommon):
         return 'fsmount'
 
     def args(self) -> List[str]:
-        entity = self.cfg.fs_auth_entities[0]
-        if entity.startswith('client.'):
-            entity = entity.split('.', 1)[-1]
+        api_user = self.cfg.ceph_config_entity
+        if api_user.startswith('client.'):
+            api_user = api_user.split('.', 1)[-1]
+        fs_user = self.cfg.fs_auth_entities[0]
+        if fs_user.startswith('client.'):
+            fs_user = fs_user.split('.', 1)[-1]
         return [
             '-c',
             (
@@ -228,7 +231,8 @@ class FSMountContainer(SambaContainerCommon):
                 ' && exec python3 cephadmlib/tincam.py'
                 ' --interval=30'
                 ' --auto-cephfs'
-                f' --discover-user={entity}'
+                f' --api-user={api_user}'
+                f' --fs-user={fs_user}'
             ),
         ]
 
