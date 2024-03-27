@@ -516,6 +516,6 @@ class SMB(ContainerDaemonForm):
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o770)
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
         if self._cfg.fsmounts:
-            file_utils.makedirs(ddir / 'srv', uid, gid, 0o771)
+            file_utils.makedirs(ddir / 'srv', uid, gid, 0o775)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
