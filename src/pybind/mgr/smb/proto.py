@@ -30,13 +30,16 @@ else:  # pragma: no cover
 
 
 if sys.version_info >= (3, 11):
-    from typing import Self
+    from typing import Self, assert_never
 elif TYPE_CHECKING:  # pragma: no cover
     # typing_extensions will not be available for the real mgr server
-    from typing_extensions import Self
+    from typing_extensions import Self, assert_never
 else:  # pragma: no cover
     # fallback type that should be ignored at runtime
     Self = Any  # type: ignore
+
+    def assert_never(arg: Any) -> None:
+        raise AssertionError(f'Ran code expected to be unreachable; {arg!r}')
 
 
 Simplified = Dict[str, Any]
