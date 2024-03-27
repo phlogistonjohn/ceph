@@ -39,6 +39,7 @@ from .proto import (
     OrchSubmitter,
     PathResolver,
     Simplified,
+    assert_never,
     checked,
 )
 from .resources import SMBResource
@@ -48,6 +49,8 @@ ClusterRef = Union[resources.Cluster, resources.RemovedCluster]
 ShareRef = Union[resources.Share, resources.RemovedShare]
 
 _DOMAIN = 'domain'
+_FSMOUNTS = 'fsmounts'
+_FS_ROOT_DIR = '/srv'
 log = logging.getLogger(__name__)
 
 
@@ -523,11 +526,13 @@ class ClusterConfigHandler:
                 change_group.cache, cluster.cluster_id
             )
         ]
+        require_fsmounts = _requires_fsmounts(change_group)
         smb_spec = _generate_smb_service_spec(
             cluster,
             config_entries,
             join_source_entries,
             data_entity=data_entity,
+            fsmounts=require_fsmounts,
         )
         _save_pending_spec_backup(self.public_store, change_group, smb_spec)
         # if orch was ever needed in the past we must "re-orch", but if we have
@@ -707,6 +712,17 @@ def _ynbool(value: bool) -> str:
 def _generate_share(
     share: resources.Share, resolver: PathResolver, cephx_entity: str
 ) -> Dict[str, Dict[str, str]]:
+    provider = share.checked_cephfs.provider
+    if provider is CephFSStorageProvider.SAMBA_VFS:
+        return _generate_share_vfs(share, resolver, cephx_entity)
+    if provider is CephFSStorageProvider.KERNEL_MOUNT:
+        return _generate_share_mount(share, resolver)
+    assert_never(provider)
+
+
+def _generate_share_vfs(
+    share: resources.Share, resolver: PathResolver, cephx_entity: str
+) -> Dict[str, Dict[str, str]]:
     assert share.cephfs is not None
     assert share.cephfs.provider == CephFSStorageProvider.SAMBA_VFS
     assert cephx_entity, "cephx entity name missing"
@@ -734,6 +750,30 @@ def _generate_share(
             'read only': _ynbool(share.readonly),
             'browseable': _ynbool(share.browseable),
             'kernel share modes': 'no',
+            'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
+        }
+    }
+
+
+def _generate_share_mount(
+    share: resources.Share, resolver: PathResolver
+) -> Dict[str, Dict[str, str]]:
+    assert share.cephfs is not None
+    assert share.cephfs.provider == CephFSStorageProvider.KERNEL_MOUNT
+    path = resolver.resolve(
+        share.cephfs.volume,
+        share.cephfs.subvolumegroup,
+        share.cephfs.subvolume,
+        share.cephfs.path,
+    ).lstrip('/')
+    # TODO: make mount path configurable?
+    full_path = f'{_FS_ROOT_DIR}/{share.cephfs.volume}/{path}'
+    return {
+        # smb.conf options
+        'options': {
+            'path': full_path,
+            'read only': _ynbool(share.readonly),
+            'browseable': _ynbool(share.browseable),
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
         }
     }
@@ -794,10 +834,13 @@ def _generate_smb_service_spec(
     config_entries: List[ConfigEntry],
     join_source_entries: List[ConfigEntry],
     data_entity: str = '',
+    fsmounts: bool = False,
 ) -> SMBSpec:
     features = []
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
         features.append(_DOMAIN)
+    if fsmounts:
+        features.append(_FSMOUNTS)
     # only one config uri can be used, the input list should be
     # ordered from lowest to highest priority and the highest priority
     # item that exists in the store will be used.
@@ -932,3 +975,10 @@ def _cephx_data_entity(cluster_id: str) -> str:
     use for data access.
     """
     return f'client.smb.fs.cluster.{cluster_id}'
+
+
+def _requires_fsmounts(change_group: ClusterChangeGroup) -> bool:
+    return any(
+        share.checked_cephfs.provider == CephFSStorageProvider.KERNEL_MOUNT
+        for share in change_group.shares
+    )
