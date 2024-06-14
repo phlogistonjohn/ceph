@@ -21,6 +21,9 @@ class SMBService(CephService):
         assert self.TYPE == spec.service_type
         logger.warning('config is a no-op')
 
+    def ranked(self) -> bool:
+        return True
+
     def prepare_create(
         self, daemon_spec: CephadmDaemonDeploySpec
     ) -> CephadmDaemonDeploySpec:
