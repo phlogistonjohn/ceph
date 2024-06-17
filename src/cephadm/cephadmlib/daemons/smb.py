@@ -277,8 +277,6 @@ class SMB(ContainerDaemonForm):
             raise Error(
                 f'invalid instance features: {", ".join(invalid_features)}'
             )
-        if Features.CLUSTERED.value in instance_features:
-            raise NotImplementedError('clustered instance')
         if not vhostname:
             # if a virtual hostname is not provided, generate one by prefixing
             # the cluster/instanced id to the system hostname
