@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Iterator, List, Tuple, cast
+from typing import Any, Dict, Iterator, List, Tuple, cast, Optional
 
 from ceph.deployment.service_spec import ServiceSpec, SMBSpec
 
@@ -23,6 +23,12 @@ class SMBService(CephService):
 
     def ranked(self) -> bool:
         return True
+
+    def fence_old_ranks(self,
+                        spec: ServiceSpec,
+                        rank_map: Dict[int, Dict[int, Optional[str]]],
+                        num_ranks: int) -> None:
+        logger.warning('HACK %r %r', rank_map, num_ranks)
 
     def prepare_create(
         self, daemon_spec: CephadmDaemonDeploySpec
