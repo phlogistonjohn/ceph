@@ -136,6 +136,23 @@ def fetch_endpoints(ctx: CephadmContext) -> List[EndPoint]:
     return endpoints
 
 
+def fetch_rank_info(ctx: CephadmContext) -> Optional[Tuple[int, int]]:
+    """Return the daemon's rank and rank generation values as a tuple of ints
+    if available. Return None if rank information is not available.
+    """
+    meta = getattr(ctx, 'meta_properties', None)
+    if meta is None:
+        return None
+    try:
+        # We must either return both rank *and* rank_generation together or
+        # nothing at all.
+        rank = int(meta['rank'])
+        rank_generation = int(meta['rank_generation'])
+    except KeyError:
+        return None
+    return (rank, rank_generation)
+
+
 def get_config_and_keyring(ctx):
     # type: (CephadmContext) -> Tuple[Optional[str], Optional[str]]
     config = None
