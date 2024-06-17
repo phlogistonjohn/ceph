@@ -58,6 +58,9 @@ class Config:
     smb_port: int
     ceph_config_entity: str
     vhostname: str
+    # clustering related values
+    rank: int
+    rank_generation: int
 
     def __init__(
         self,
@@ -74,6 +77,8 @@ class Config:
         smb_port: int = 0,
         ceph_config_entity: str = 'client.admin',
         vhostname: str = '',
+        rank: int = -1,
+        rank_generation: int = -1,
     ) -> None:
         self.instance_id = instance_id
         self.source_config = source_config
@@ -87,6 +92,8 @@ class Config:
         self.smb_port = smb_port
         self.ceph_config_entity = ceph_config_entity
         self.vhostname = vhostname
+        self.rank = rank
+        self.rank_generation = rank_generation
 
     def __str__(self) -> str:
         return (
@@ -128,6 +135,12 @@ class SambaContainerCommon:
         }
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
+        if self.cfg.rank >= 0:
+            # how the values are known to ceph (for debugging purposes...)
+            environ['RANK'] = str(self.cfg.rank)
+            environ['RANK_GENERATION'] = str(self.cfg.rank)
+            # samba container specific variant
+            environ['NODE_NUMBER'] = environ['RANK']
         return environ
 
     def envs_list(self) -> List[str]:
@@ -234,6 +247,7 @@ class SMB(ContainerDaemonForm):
         self._raw_configs: Dict[str, Any] = context_getters.fetch_configs(ctx)
         self._config_keyring = context_getters.get_config_and_keyring(ctx)
         self._cached_layout: Optional[ContainerLayout] = None
+        self._rank_info = context_getters.fetch_rank_info(ctx)
         self.smb_port = 445
         logger.debug('Created SMB ContainerDaemonForm instance')
 
@@ -284,6 +298,11 @@ class SMB(ContainerDaemonForm):
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
         )
+        if self._rank_info:
+            (
+                self._instance_cfg.rank,
+                self._instance_cfg.rank_generation,
+            ) = self._rank_info
         self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)
