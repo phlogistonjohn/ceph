@@ -299,7 +299,7 @@ class CephadmService(metaclass=ABCMeta):
                         spec: ServiceSpec,
                         rank_map: Dict[int, Dict[int, Optional[str]]],
                         num_ranks: int) -> None:
-        assert False
+        raise NotImplementedError()
 
     def make_daemon_spec(
             self,
