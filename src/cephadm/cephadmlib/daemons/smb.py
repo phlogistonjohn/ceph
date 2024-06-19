@@ -158,7 +158,19 @@ class SambaContainerCommon:
         return []
 
 
-class SMBDContainer(SambaContainerCommon):
+class SambaContainerNetworked(SambaContainerCommon):
+    """SambaContainerCommon subclass that enables additional networking
+    params by default.
+    NB: By networked we mean needs to use public network resources outside
+    the ceph cluster.
+    """
+
+    def container_args(self) -> List[str]:
+        cargs = _container_dns_args(self.cfg)
+        return cargs
+
+
+class SMBDContainer(SambaContainerNetworked):
     def name(self) -> str:
         return 'smbd'
 
@@ -173,7 +185,7 @@ class SMBDContainer(SambaContainerCommon):
         return cargs
 
 
-class WinbindContainer(SambaContainerCommon):
+class WinbindContainer(SambaContainerNetworked):
     def name(self) -> str:
         return 'winbindd'
 
@@ -189,7 +201,7 @@ class ConfigInitContainer(SambaContainerCommon):
         return super().args() + ['init']
 
 
-class MustJoinContainer(SambaContainerCommon):
+class MustJoinContainer(SambaContainerNetworked):
     def name(self) -> str:
         return 'mustjoin'
 
@@ -210,6 +222,56 @@ class ConfigWatchContainer(SambaContainerCommon):
 
     def args(self) -> List[str]:
         return super().args() + ['update-config', '--watch']
+
+
+class CTDBMigrateInitContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbMigrate'
+
+    def args(self) -> List[str]:
+        return super().args() + [
+            'ctdb-migrate',
+            '--dest-dir=/var/lib/ctdb/persistent',
+        ]
+
+
+class CTDBSetNodeInitContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbSetNode'
+
+    def args(self) -> List[str]:
+        return super().args() + ['ctdb-set-node']
+
+
+class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbMustHaveNode'
+
+    def args(self) -> List[str]:
+        return super().args() + ['ctdb-must-have-node']
+
+
+class CTDBDaemonContainer(SambaContainerNetworked):
+    def name(self) -> str:
+        return 'ctdbd'
+
+    def args(self) -> List[str]:
+        return super().args() + [
+            'run',
+            'ctdbd',
+            '--setup=smb_ctdb',
+            '--setup=ctdb_config',
+            '--setup=ctdb_etc',
+            '--setup=ctdb_nodes',
+        ]
+
+
+class CTDBNodeMonitorContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbNodes'
+
+    def args(self) -> List[str]:
+        return super().args() + ['ctdb-manage-nodes']
 
 
 class ContainerLayout:
@@ -347,6 +409,17 @@ class SMB(ContainerDaemonForm):
         if self._cfg.domain_member:
             init_ctrs.append(MustJoinContainer(self._cfg))
             ctrs.append(WinbindContainer(self._cfg))
+
+        if self._cfg.clustered:
+            init_ctrs += [
+                CTDBMigrateInitContainer(self._cfg),
+                CTDBSetNodeInitContainer(self._cfg),
+                CTDBMustHaveNodeInitContainer(self._cfg),
+            ]
+            ctrs += [
+                CTDBDaemonContainer(self._cfg),
+                CTDBNodeMonitorContainer(self._cfg),
+            ]
 
         smbd = SMBDContainer(self._cfg)
         self._cached_layout = ContainerLayout(init_ctrs, smbd, ctrs)
