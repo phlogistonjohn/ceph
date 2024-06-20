@@ -133,6 +133,8 @@ class SambaContainerCommon:
             'SAMBA_CONTAINER_ID': self.cfg.instance_id,
             'SAMBACC_CONFIG': json.dumps(self.cfg.config_uris()),
         }
+        # FIXME cleanup
+        environ['SAMBACC_CTDB'] = 'ctdb-is-experimental'
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
         if self.cfg.rank >= 0:
@@ -235,12 +237,27 @@ class CTDBMigrateInitContainer(SambaContainerCommon):
         ]
 
 
+def _ctdb_args(cfg: Config, args: List[str]) -> List[str]:
+    # TODO parametrize pool and object names?
+    meta_state_uri = f'rados://.smb/{cfg.instance_id}/cluster.meta.json'
+    ctdb_args = [
+        f'--hostname={cfg.vhostname}',
+        '--take-node-number-from-env',
+        f'--metadata-state={meta_state_uri}',
+    ]
+    return args + ctdb_args
+
+
 class CTDBSetNodeInitContainer(SambaContainerCommon):
     def name(self) -> str:
         return 'ctdbSetNode'
 
     def args(self) -> List[str]:
-        return super().args() + ['ctdb-set-node']
+        args = super.args()
+        args.append('ctdb-set-node')
+        args = _ctdb_args(args)
+        # args.append(f'--ip={IP}')
+        return args
 
 
 class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
@@ -248,7 +265,7 @@ class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
         return 'ctdbMustHaveNode'
 
     def args(self) -> List[str]:
-        return super().args() + ['ctdb-must-have-node']
+        return super().args() + _ctdb_args(['ctdb-must-have-node'])
 
 
 class CTDBDaemonContainer(SambaContainerNetworked):
@@ -271,7 +288,7 @@ class CTDBNodeMonitorContainer(SambaContainerCommon):
         return 'ctdbNodes'
 
     def args(self) -> List[str]:
-        return super().args() + ['ctdb-manage-nodes']
+        return super().args() + _ctdb_args(['ctdb-manage-nodes'])
 
 
 class ContainerLayout:
