@@ -85,7 +85,7 @@ class SMBService(CephService):
         # with keys like smb/config/<cluster_id>/*.
         return f'allow command "config-key get" with "key" prefix "smb/config/{name}/"'
 
-    def _pool_caps_from_uri(self, uri: str) -> list[str]:
+    def _pool_caps_from_uri(self, uri: str) -> List[str]:
         if not uri.startswith('rados://'):
             logger.warning("ignoring unexpected uri scheme: %r", uri)
             return []
