@@ -2709,7 +2709,7 @@ yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)
 
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
-    _valid_features = {'domain'}
+    _valid_features = {'domain', 'clustered'}
 
     def __init__(
         self,
