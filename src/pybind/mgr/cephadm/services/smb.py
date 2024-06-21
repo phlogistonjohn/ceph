@@ -103,7 +103,7 @@ class SMBService(CephService):
         # enhanced caps for smb pools to be used for ctdb mgmt
         return [
             # TODO - restrict this read access to the namespace too?
-            f'allow r pool={pool}'
+            f'allow r pool={pool}',
             # the x perm is needed to lock the cluster meta object
             f'allow rxw pool={pool} namespace={ns} object_prefix cluster.meta.'
         ]
