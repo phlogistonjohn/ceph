@@ -105,7 +105,7 @@ class SMBService(CephService):
             # TODO - restrict this read access to the namespace too?
             f'allow r pool={pool}',
             # the x perm is needed to lock the cluster meta object
-            f'allow rxw pool={pool} namespace={ns} object_prefix cluster.meta.'
+            f'allow rwx pool={pool} namespace={ns} object_prefix cluster.meta.'
         ]
 
     def _expand_osd_caps(self, smb_spec: SMBSpec) -> str:
