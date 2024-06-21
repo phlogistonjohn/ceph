@@ -395,6 +395,11 @@ class Cluster(_RBase):
     def cleaned_custom_smb_global_options(self) -> Optional[Dict[str, str]]:
         return validation.clean_custom_options(self.custom_smb_global_options)
 
+    def is_clustered(self) -> bool:
+        """Return true if smbd instance should use (CTDB) clustering."""
+        # XXX HACK - try detecting in coun == 1 or not
+        return True
+
 
 @resourcelib.resource('ceph.smb.join.auth')
 class JoinAuth(_RBase):
