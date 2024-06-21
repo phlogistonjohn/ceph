@@ -1056,12 +1056,15 @@ def _generate_config(
         for share in shares
     }
 
+    instance_features = []
+    if cluster.is_clustered():
+        instance_features.append('ctdb')
     cfg: Dict[str, Any] = {
         'samba-container-config': 'v0',
         'configs': {
             cluster.cluster_id: {
                 'instance_name': cluster.cluster_id,
-                'instance_features': [],
+                'instance_features': instance_features,
                 'globals': ['default', cluster.cluster_id],
                 'shares': list(share_configs.keys()),
             },
