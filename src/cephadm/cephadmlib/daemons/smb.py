@@ -253,7 +253,7 @@ class CTDBSetNodeInitContainer(SambaContainerCommon):
         return 'ctdbSetNode'
 
     def args(self) -> List[str]:
-        args = super.args()
+        args = super().args()
         args.append('ctdb-set-node')
         args = _ctdb_args(args)
         # args.append(f'--ip={IP}')
