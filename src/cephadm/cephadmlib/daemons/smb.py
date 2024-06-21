@@ -232,6 +232,7 @@ class CTDBMigrateInitContainer(SambaContainerCommon):
 
     def args(self) -> List[str]:
         return super().args() + [
+            '--skip-if=env:NODE_NUMBER!=0',
             'ctdb-migrate',
             '--dest-dir=/var/lib/ctdb/persistent',
         ]
