@@ -255,7 +255,7 @@ class CTDBSetNodeInitContainer(SambaContainerCommon):
     def args(self) -> List[str]:
         args = super().args()
         args.append('ctdb-set-node')
-        args = _ctdb_args(args)
+        args = _ctdb_args(self.cfg, args)
         # args.append(f'--ip={IP}')
         return args
 
@@ -265,7 +265,7 @@ class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
         return 'ctdbMustHaveNode'
 
     def args(self) -> List[str]:
-        return super().args() + _ctdb_args(['ctdb-must-have-node'])
+        return super().args() + _ctdb_args(self.cfg, ['ctdb-must-have-node'])
 
 
 class CTDBDaemonContainer(SambaContainerNetworked):
@@ -288,7 +288,7 @@ class CTDBNodeMonitorContainer(SambaContainerCommon):
         return 'ctdbNodes'
 
     def args(self) -> List[str]:
-        return super().args() + _ctdb_args(['ctdb-manage-nodes'])
+        return super().args() + _ctdb_args(self.cfg, ['ctdb-manage-nodes'])
 
 
 class ContainerLayout:
