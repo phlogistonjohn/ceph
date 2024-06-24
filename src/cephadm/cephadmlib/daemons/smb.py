@@ -181,7 +181,9 @@ class SMBDContainer(SambaContainerNetworked):
         return 'smbd'
 
     def args(self) -> List[str]:
-        return super().args() + ['run', 'smbd']
+        args = super().args()
+        args.append('--debug-delay=30')
+        return args + ['run', 'smbd']
 
     def container_args(self) -> List[str]:
         cargs = []
