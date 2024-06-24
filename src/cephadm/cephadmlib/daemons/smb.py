@@ -568,6 +568,11 @@ class SMB(ContainerDaemonForm):
         mounts[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
         mounts[config] = '/etc/ceph/ceph.conf:z'
         mounts[keyring] = '/etc/ceph/keyring:z'
+        if self._cfg.clustered:
+            ctdb_persistent = str(data_dir / 'ctdb/persistent')
+            ctdb_shared = str(data_dir / 'ctdb/shared')
+            mounts[ctdb_persistent] = '/var/lib/ctdb/persistent'
+            mounts[ctdb_shared] = '/var/lib/ctdb/shared'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -583,6 +588,9 @@ class SMB(ContainerDaemonForm):
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
+        if self._cfg.clustered:
+            file_utils.makedirs(ddir / 'ctdb/persistent', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'ctdb/shared', uid, gid, 0o770)
 
 
 def _nodeip(ctx: CephadmContext) -> str:
