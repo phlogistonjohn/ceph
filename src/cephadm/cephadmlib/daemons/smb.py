@@ -25,6 +25,7 @@ from ..context import CephadmContext
 from ..daemon_identity import DaemonIdentity, DaemonSubIdentity
 from ..deploy import DeploymentType
 from ..exceptions import Error
+from ..host_facts import list_networks
 from ..net_utils import EndPoint
 
 
@@ -61,6 +62,7 @@ class Config:
     # clustering related values
     rank: int
     rank_generation: int
+    node_ip: str
 
     def __init__(
         self,
@@ -79,6 +81,7 @@ class Config:
         vhostname: str = '',
         rank: int = -1,
         rank_generation: int = -1,
+        node_ip: str = '',
     ) -> None:
         self.instance_id = instance_id
         self.source_config = source_config
@@ -94,6 +97,7 @@ class Config:
         self.vhostname = vhostname
         self.rank = rank
         self.rank_generation = rank_generation
+        self.node_ip = node_ip
 
     def __str__(self) -> str:
         return (
@@ -257,7 +261,8 @@ class CTDBSetNodeInitContainer(SambaContainerCommon):
         args = super().args()
         args.append('ctdb-set-node')
         args = _ctdb_args(self.cfg, args)
-        # args.append(f'--ip={IP}')
+        if self.cfg.node_ip:
+            args.append(f'--ip={self.cfg.node_ip}')
         return args
 
 
@@ -328,6 +333,7 @@ class SMB(ContainerDaemonForm):
         self._config_keyring = context_getters.get_config_and_keyring(ctx)
         self._cached_layout: Optional[ContainerLayout] = None
         self._rank_info = context_getters.fetch_rank_info(ctx)
+        self._node_ip = _nodeip(ctx)
         self.smb_port = 445
         logger.debug('Created SMB ContainerDaemonForm instance')
 
@@ -375,6 +381,7 @@ class SMB(ContainerDaemonForm):
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
+            node_ip=self._node_ip,
         )
         if self._rank_info:
             (
@@ -576,3 +583,17 @@ class SMB(ContainerDaemonForm):
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
+
+
+def _nodeip(ctx: CephadmContext) -> str:
+    try:
+        netl = list_networks(ctx)
+    except FileNotFoundError:
+        return ''
+    for netk, netv in netl.items():
+        logger.info('netk=%r, netv=%r', netk, netv)
+        for addrs in netv.values():
+            nodeip = list(addrs)[0]
+            logger.info('nodeip=%r', nodeip)
+            return nodeip
+    raise RuntimeError('no node ip detected')
