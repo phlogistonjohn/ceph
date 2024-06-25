@@ -581,9 +581,11 @@ class SMB(ContainerDaemonForm):
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
             ctdb_shared = str(data_dir / 'ctdb/shared')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
+            ctdb_volatile = str(data_dir / 'ctdb/volatile')
             mounts[ctdb_persistent] = '/var/lib/ctdb/persistent'
             mounts[ctdb_shared] = '/var/lib/ctdb/shared'
             mounts[ctdb_run] = '/var/run/ctdb'
+            mounts[ctdb_volatile] = '/var/lib/ctdb/volatile'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -603,6 +605,7 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/persistent', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/shared', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
 
 
 def _nodeip(ctx: CephadmContext) -> str:
