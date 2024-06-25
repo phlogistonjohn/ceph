@@ -183,7 +183,13 @@ class SMBDContainer(SambaContainerCommon):
     def args(self) -> List[str]:
         args = super().args()
         args.append('--debug-delay=30')
-        return args + ['run', 'smbd']
+        args.append('run')
+        if self.cfg.clustered:
+            auth_kind = 'nsswitch' if self.cfg.domain_member else 'users'
+            args.append(f'--setup={auth_kind}')
+            args.append('--setup=smb_ctdb')
+        args.append('smbd')
+        return args
 
     def container_args(self) -> List[str]:
         cargs = []
@@ -198,7 +204,12 @@ class WinbindContainer(SambaContainerCommon):
         return 'winbindd'
 
     def args(self) -> List[str]:
-        return super().args() + ['run', 'winbindd']
+        args = super().args()
+        args.append('run')
+        if self.cfg.clustered:
+            args.append('--setup=smb_ctdb')
+        args.append('winbindd')
+        return args
 
 
 class ConfigInitContainer(SambaContainerCommon):
