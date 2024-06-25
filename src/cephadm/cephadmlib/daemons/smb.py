@@ -164,9 +164,9 @@ class SambaContainerCommon:
         return []
 
 
-class SambaContainerNetworked(SambaContainerCommon):
+class SambaNetworkedInitContainer(SambaContainerCommon):
     """SambaContainerCommon subclass that enables additional networking
-    params by default.
+    params for an init container by default.
     NB: By networked we mean needs to use public network resources outside
     the ceph cluster.
     """
@@ -176,7 +176,7 @@ class SambaContainerNetworked(SambaContainerCommon):
         return cargs
 
 
-class SMBDContainer(SambaContainerNetworked):
+class SMBDContainer(SambaContainerCommon):
     def name(self) -> str:
         return 'smbd'
 
@@ -193,7 +193,7 @@ class SMBDContainer(SambaContainerNetworked):
         return cargs
 
 
-class WinbindContainer(SambaContainerNetworked):
+class WinbindContainer(SambaContainerCommon):
     def name(self) -> str:
         return 'winbindd'
 
@@ -209,7 +209,7 @@ class ConfigInitContainer(SambaContainerCommon):
         return super().args() + ['init']
 
 
-class MustJoinContainer(SambaContainerNetworked):
+class MustJoinContainer(SambaNetworkedInitContainer):
     def name(self) -> str:
         return 'mustjoin'
 
@@ -218,10 +218,6 @@ class MustJoinContainer(SambaContainerNetworked):
         for join_src in self.cfg.join_sources:
             args.append(f'-j{join_src}')
         return args
-
-    def container_args(self) -> List[str]:
-        cargs = _container_dns_args(self.cfg)
-        return cargs
 
 
 class ConfigWatchContainer(SambaContainerCommon):
@@ -276,7 +272,7 @@ class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
         return super().args() + _ctdb_args(self.cfg, ['ctdb-must-have-node'])
 
 
-class CTDBDaemonContainer(SambaContainerNetworked):
+class CTDBDaemonContainer(SambaContainerCommon):
     def name(self) -> str:
         return 'ctdbd'
 
