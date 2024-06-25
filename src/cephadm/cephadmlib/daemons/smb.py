@@ -520,7 +520,7 @@ class SMB(ContainerDaemonForm):
         )
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = daemon_to_container(ctx, self, host_network=False)
+        ctr = daemon_to_container(ctx, self, host_network=self._cfg.clustered)
         # We want to share the IPC ns between the samba containers for one
         # instance.  Cephadm's default, host ipc, is not what we want.
         # Unsetting it works fine for podman but docker (on ubuntu 22.04) needs
