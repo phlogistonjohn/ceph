@@ -257,7 +257,7 @@ def _ctdb_args(cfg: Config, args: List[str]) -> List[str]:
     ctdb_args = [
         f'--hostname={cfg.vhostname}',
         '--take-node-number-from-env',
-        f'--metadata-state={meta_state_uri}',
+        f'--metadata-source={meta_state_uri}',
     ]
     return args + ctdb_args
 
