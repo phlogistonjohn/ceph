@@ -602,7 +602,8 @@ class SMB(ContainerDaemonForm):
     def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
         self.validate()
         ddir = pathlib.Path(data_dir)
-        file_utils.makedirs(ddir / 'etc-samba-container', uid, gid, 0o770)
+        etc_samba_ctr = ddir / 'etc-samba-container'
+        file_utils.makedirs(etc_samba_ctr, uid, gid, 0o770)
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o770)
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
         if self._files:
@@ -613,6 +614,29 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
+            self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
+
+    def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
+        # TODO parametrize pool and object names?
+        reclock_cmd = [
+            '/usr/libexec/ctdb/ctdb_mutex_ceph_rados_helper',
+            'ceph',  # can this ever be anything else?
+            self._cfg.ceph_config_entity,
+            '.smb',
+            'cluster.meta.cluster_lock',
+            '-n',
+            self._cfg.instance_id,
+        ]
+        stub_config = {
+            'samba-container-config': 'v0',
+            'ctdb': {
+                'recovery_lock': '!' + ' '.join(reclock_cmd),
+                # nodes_path ?
+                # cluster_meta_uri ?
+            },
+        }
+        with open(path, 'w') as fh:
+            json.dump(stub_config, fh)
 
 
 def _nodeip(ctx: CephadmContext) -> str:
