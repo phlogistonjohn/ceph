@@ -110,6 +110,8 @@ class Config:
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
         uris.extend(self.user_sources or [])
+        if self.clustered:
+            uris.append('/etc/samba/container/ctdb.json')
         return uris
 
 
