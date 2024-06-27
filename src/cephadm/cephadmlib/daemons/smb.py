@@ -280,7 +280,11 @@ class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
         return 'ctdbMustHaveNode'
 
     def args(self) -> List[str]:
-        return super().args() + _ctdb_args(self.cfg, ['ctdb-must-have-node'])
+        return (
+            super().args()
+            + _ctdb_args(self.cfg, ['ctdb-must-have-node'])
+            + ['--write-nodes']
+        )
 
 
 class CTDBDaemonContainer(SambaContainerCommon):
