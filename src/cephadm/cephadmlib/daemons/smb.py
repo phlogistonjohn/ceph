@@ -175,7 +175,7 @@ class SambaNetworkedInitContainer(SambaContainerCommon):
 
     def container_args(self) -> List[str]:
         cargs = _container_dns_args(self.cfg)
-        return cargs
+        return cargs + ['--network=host']
 
 
 class SMBDContainer(SambaContainerCommon):
