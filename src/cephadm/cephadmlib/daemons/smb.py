@@ -250,6 +250,7 @@ class CTDBMigrateInitContainer(SambaContainerCommon):
             '--skip-if=env:NODE_NUMBER!=0',
             'ctdb-migrate',
             '--dest-dir=/var/lib/ctdb/persistent',
+            '--archive=/var/lib/samba/.migrated',
         ]
 
 
