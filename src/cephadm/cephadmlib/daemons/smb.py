@@ -227,7 +227,7 @@ class MustJoinContainer(SambaNetworkedInitContainer):
         return 'mustjoin'
 
     def args(self) -> List[str]:
-        args = super().args() + ['must-join']
+        args = super().args() + ['--skip-if=env:NODE_NUMBER!=0', 'must-join']
         for join_src in self.cfg.join_sources:
             args.append(f'-j{join_src}')
         return args
