@@ -621,14 +621,13 @@ class SMB(ContainerDaemonForm):
 
     def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
         # TODO parametrize pool and object names?
+        pool = '.smb'
+        ns = self._cfg.instance_id
+        obj = 'cluster.meta.cluster_lock'
         reclock_cmd = [
-            '/usr/libexec/ctdb/ctdb_mutex_ceph_rados_helper',
-            'ceph',  # can this ever be anything else?
-            self._cfg.ceph_config_entity,
-            '.smb',
-            'cluster.meta.cluster_lock',
-            '-n',
-            self._cfg.instance_id,
+            '/usr/bin/samba-container',
+            'ctdb-rados-mutex',
+            f'rados://{pool}/{ns}/{obj}',
         ]
         stub_config = {
             'samba-container-config': 'v0',
