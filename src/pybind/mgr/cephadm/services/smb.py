@@ -78,9 +78,7 @@ class SMBService(CephService):
     def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
         # We want a clear, distinct auth entity for fetching the config versus
         # data path access.
-        # XXX CTDB SUCKS!
-        keyid = daemon_id.split('.')[0]
-        return AuthEntity(f'client.{self.TYPE}.config.{keyid}')
+        return AuthEntity(f'client.{self.TYPE}.config.{daemon_id}')
 
     def _allow_config_key_command(self, name: str) -> str:
         # permit the samba container config access to the mon config key store
