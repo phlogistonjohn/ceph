@@ -22,8 +22,9 @@ class SMBService(CephService):
         assert self.TYPE == spec.service_type
         logger.warning('config is a no-op')
 
-    def ranked(self) -> bool:
-        return True
+    def ranked(self, spec: ServiceSpec) -> bool:
+        smb_spec = cast(SMBSpec, spec)
+        return 'clustered' in smb_spec.features
 
     def fence_old_ranks(self,
                         spec: ServiceSpec,
