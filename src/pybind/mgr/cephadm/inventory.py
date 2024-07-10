@@ -1281,6 +1281,7 @@ class HostCache():
     def get_related_service_daemons(self, service_spec: ServiceSpec) -> Optional[List[orchestrator.DaemonDescription]]:
         if service_spec.service_type == 'ingress':
             name = cast(IngressSpec, service_spec).backend_service
+            assert name is not None
             dds = self.get_daemons_by_service(name)
             dds += self.get_tmp_daemons_by_service(name)
             logger.debug(f'Found related daemons {dds} for service {service_spec.service_name()}')
