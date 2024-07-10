@@ -1273,6 +1273,12 @@ class HostCache():
 
         return list(dd for dd in self._get_daemons() if dd.service_name() == service_name)
 
+    def get_tmp_daemons_by_service(
+        self, service_name: str
+    ) -> List[orchestrator.DaemonDescription]:
+        dds = self._get_tmp_daemons()
+        return [dd for dd in dds if dd.service_name() == service_name]
+
     def get_related_service_daemons(self, service_spec: ServiceSpec) -> Optional[List[orchestrator.DaemonDescription]]:
         if service_spec.service_type == 'ingress':
             dds = list(dd for dd in self._get_daemons() if dd.service_name() == cast(IngressSpec, service_spec).backend_service)
