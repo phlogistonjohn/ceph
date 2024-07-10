@@ -20,7 +20,8 @@ class SMBService(CephService):
 
     def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
-        logger.warning('config is a no-op')
+        smb_spec = cast(SMBSpec, spec)
+        self._configure_cluster_meta(smb_spec)
 
     def ranked(self, spec: ServiceSpec) -> bool:
         smb_spec = cast(SMBSpec, spec)
@@ -147,3 +148,34 @@ class SMBService(CephService):
             'keyring': keyring,
             'config_auth_entity': entity,
         }
+
+    def _configure_cluster_meta(self, smb_spec: SMBSpec) -> None:
+        if 'clustered' not in smb_spec.features:
+            logger.debug('not a smb/ctdb cluster')
+            return
+        logger.info('configuring smb/ctdb cluster')
+        name = smb_spec.service_name()
+        daemons = self.mgr.cache.get_daemons_by_service(name)
+        logger.warning("YEAH, %r", daemons)
+        tmp_daemons = self.mgr.cache.get_tmp_daemons_by_service(name)
+        logger.warning("YEAH TMP, %r", tmp_daemons)
+        rank_map = self.mgr.spec_store[name].rank_map or {}
+        logger.warning("RANK MAP, %r", rank_map)
+        from smb import clustermeta
+
+        # hack
+        uri = f'rados://.smb/{smb_spec.cluster_id}/cluster.meta.json'
+        svc_map: clustermeta.DaemonMap = {}
+        for dd in daemons + tmp_daemons:
+            assert dd.daemon_type and dd.daemon_id
+            assert dd.hostname
+            host_ip = dd.ip or self.mgr.inventory.get_addr(dd.hostname)
+            svc_map[dd.name()] = {
+                'daemon_type': dd.daemon_type,
+                'daemon_id': dd.daemon_id,
+                'hostname': dd.hostname,
+                'host_ip': host_ip,
+                # specific ctdb_ip? (someday?)
+            }
+        with clustermeta.rados_object(self.mgr, uri) as cmeta:
+            cmeta.sync_ranks(rank_map, svc_map)
