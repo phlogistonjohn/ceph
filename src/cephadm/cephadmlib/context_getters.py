@@ -143,14 +143,15 @@ def fetch_rank_info(ctx: CephadmContext) -> Optional[Tuple[int, int]]:
     meta = getattr(ctx, 'meta_properties', None)
     if meta is None:
         return None
+    # We must either return both rank *and* rank_generation together or
+    # nothing at all.
     try:
-        # We must either return both rank *and* rank_generation together or
-        # nothing at all.
-        rank = int(meta['rank'])
-        rank_generation = int(meta['rank_generation'])
+        rank, gen = meta['rank'], meta['rank_generation']
     except KeyError:
         return None
-    return (rank, rank_generation)
+    if rank is None or gen is None:
+        return None
+    return int(rank), int(gen)
 
 
 def get_config_and_keyring(ctx):
