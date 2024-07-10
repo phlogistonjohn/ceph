@@ -1266,12 +1266,11 @@ class HostCache():
         for host, dm in self.daemons.copy().items():
             yield host, {name: alter(host, d) for name, d in dm.items()}
 
-    def get_daemons_by_service(self, service_name):
-        # type: (str) -> List[orchestrator.DaemonDescription]
-        assert not service_name.startswith('keepalived.')
-        assert not service_name.startswith('haproxy.')
-
-        return list(dd for dd in self._get_daemons() if dd.service_name() == service_name)
+    def get_daemons_by_service(
+        self, service_name: str
+    ) -> List[orchestrator.DaemonDescription]:
+        dds = self._get_daemons()
+        return [dd for dd in dds if dd.service_name() == service_name]
 
     def get_tmp_daemons_by_service(
         self, service_name: str
@@ -1281,17 +1280,18 @@ class HostCache():
 
     def get_related_service_daemons(self, service_spec: ServiceSpec) -> Optional[List[orchestrator.DaemonDescription]]:
         if service_spec.service_type == 'ingress':
-            dds = list(dd for dd in self._get_daemons() if dd.service_name() == cast(IngressSpec, service_spec).backend_service)
-            dds += list(dd for dd in self._get_tmp_daemons() if dd.service_name() == cast(IngressSpec, service_spec).backend_service)
+            name = cast(IngressSpec, service_spec).backend_service
+            dds = self.get_daemons_by_service(name)
+            dds += self.get_tmp_daemons_by_service(name)
             logger.debug(f'Found related daemons {dds} for service {service_spec.service_name()}')
             return dds
-        else:
-            for ingress_spec in [cast(IngressSpec, s) for s in self.mgr.spec_store.active_specs.values() if s.service_type == 'ingress']:
-                if ingress_spec.backend_service == service_spec.service_name():
-                    dds = list(dd for dd in self._get_daemons() if dd.service_name() == ingress_spec.service_name())
-                    dds += list(dd for dd in self._get_tmp_daemons() if dd.service_name() == ingress_spec.service_name())
-                    logger.debug(f'Found related daemons {dds} for service {service_spec.service_name()}')
-                    return dds
+        for ingress_spec in [cast(IngressSpec, s) for s in self.mgr.spec_store.active_specs.values() if s.service_type == 'ingress']:
+            if ingress_spec.backend_service == service_spec.service_name():
+                name = ingress_spec.service_name()
+                dds = self.get_daemons_by_service(name)
+                dds += self.get_tmp_daemons_by_service(name)
+                logger.debug(f'Found related daemons {dds} for service {service_spec.service_name()}')
+                return dds
         return None
 
     def get_daemons_by_type(self, service_type: str, host: str = '') -> List[orchestrator.DaemonDescription]:
