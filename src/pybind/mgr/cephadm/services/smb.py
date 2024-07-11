@@ -69,6 +69,7 @@ class SMBService(CephService):
             )
         )
         logger.debug('smb generate_config: %r', config_blobs)
+        self._configure_cluster_meta(smb_spec, daemon_spec)
         return config_blobs, []
 
     def config_dashboard(
@@ -149,7 +150,7 @@ class SMBService(CephService):
             'config_auth_entity': entity,
         }
 
-    def _configure_cluster_meta(self, smb_spec: SMBSpec) -> None:
+    def _configure_cluster_meta(self, smb_spec: SMBSpec, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         if 'clustered' not in smb_spec.features:
             logger.debug('not a smb/ctdb cluster')
             return
@@ -161,6 +162,7 @@ class SMBService(CephService):
         logger.warning("YEAH TMP, %r", tmp_daemons)
         rank_map = self.mgr.spec_store[name].rank_map or {}
         logger.warning("RANK MAP, %r", rank_map)
+        logger.warning("DSPEC, %r", daemon_spec)
         from smb import clustermeta
 
         # hack
@@ -177,5 +179,15 @@ class SMBService(CephService):
                 'host_ip': host_ip,
                 # specific ctdb_ip? (someday?)
             }
+        if daemon_spec:
+            host_ip = daemon_spec.ip or self.mgr.inventory.get_addr(daemon_spec.host)
+            svc_map[daemon_spec.name()] = {
+                'daemon_type': daemon_spec.daemon_type,
+                'daemon_id': daemon_spec.daemon_id,
+                'hostname': daemon_spec.host,
+                'host_ip': host_ip,
+                # specific ctdb_ip? (someday?)
+            }
+        logger.warning("infos: %r", svc_map)
         with clustermeta.rados_object(self.mgr, uri) as cmeta:
             cmeta.sync_ranks(rank_map, svc_map)
