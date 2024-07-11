@@ -43,6 +43,16 @@ class SMBService(CephService):
         )
         return daemon_spec
 
+    def post_create(
+        self, daemon_spec: CephadmDaemonDeploySpec
+    ) -> None:
+        logger.warning('smb post_create')
+        assert self.TYPE == daemon_spec.daemon_type
+        smb_spec = cast(
+            SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec
+        )
+        self._configure_cluster_meta(smb_spec)
+
     def generate_config(
         self, daemon_spec: CephadmDaemonDeploySpec
     ) -> Tuple[Dict[str, Any], List[str]]:
