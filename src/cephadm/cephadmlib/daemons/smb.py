@@ -459,7 +459,7 @@ class SMB(ContainerDaemonForm):
             ]
             ctrs += [
                 CTDBDaemonContainer(self._cfg),
-                CTDBNodeMonitorContainer(self._cfg),
+                # CTDBNodeMonitorContainer(self._cfg),
             ]
 
         smbd = SMBDContainer(self._cfg)
