@@ -964,6 +964,7 @@ class CephadmServe:
                 )
                 daemons.append(sd)
                 self.mgr.cache.append_tmp_daemon(slot.hostname, sd)
+                svc.post_create(daemon_spec)
 
             if daemon_place_fails:
                 self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(

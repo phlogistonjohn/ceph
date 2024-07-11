@@ -333,6 +333,11 @@ class CephadmService(metaclass=ABCMeta):
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         raise NotImplementedError()
 
+    def post_create(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        """Hook method that is called after a daemon has been placed and created.
+        """
+        pass
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
 
