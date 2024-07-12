@@ -171,6 +171,9 @@ class ClusterMeta:
         }
 
 
+_LOCK_NAME = "cluster_meta"
+
+
 @contextlib.contextmanager
 def rados_object(mgr: 'MgrModule', uri: str) -> Iterator[ClusterMeta]:
     """Return a cluster meta object that will store persistent data in rados."""
@@ -181,11 +184,11 @@ def rados_object(mgr: 'MgrModule', uri: str) -> Iterator[ClusterMeta]:
     previous = {}
     entry = store[ns, objname]
     try:
-        # with entry.locked() ?
-        previous = entry.get()
+        with entry.locked(_LOCK_NAME):
+            previous = entry.get()
     except KeyError:
         log.debug('no previous object %s found', uri)
     cmeta.load(previous)
     yield cmeta
-    # with entry.locked():
-    entry.set(cmeta.to_simplified())
+    with entry.locked(_LOCK_NAME):
+        entry.set(cmeta.to_simplified())
