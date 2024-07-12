@@ -162,10 +162,9 @@ class ClusterMeta:
         assert name
         name = f'smb.{name}'
         di = daemon_map[name]
-        smb_hostname = f'{di["daemon_id"]}-{di["hostname"]}'
         return {
             'pnn': rank,
-            'identity': smb_hostname,
+            'identity': name,
             'node': di['host_ip'],
             'state': 'ready',
         }
