@@ -72,6 +72,10 @@ class SMBService(CephService):
             config_blobs['user_sources'] = smb_spec.user_sources
         if smb_spec.custom_dns:
             config_blobs['custom_dns'] = smb_spec.custom_dns
+        if smb_spec.cluster_meta_uri:
+            config_blobs['cluster_meta_uri'] = smb_spec.cluster_meta_uri
+        if smb_spec.cluster_lock_uri:
+            config_blobs['cluster_lock_uri'] = smb_spec.cluster_lock_uri
         ceph_users = smb_spec.include_ceph_users or []
         config_blobs.update(
             self._ceph_config_and_keyring_for(
@@ -176,7 +180,8 @@ class SMBService(CephService):
         from smb import clustermeta
 
         # hack
-        uri = f'rados://.smb/{smb_spec.cluster_id}/cluster.meta.json'
+        uri = smb_spec.cluster_meta_uri
+        assert uri
         svc_map: clustermeta.DaemonMap = {}
         for dd in daemons + tmp_daemons:
             assert dd.daemon_type and dd.daemon_id
