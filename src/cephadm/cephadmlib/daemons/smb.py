@@ -47,6 +47,7 @@ class Features(enum.Enum):
 
 
 class Config:
+    identity: DaemonIdentity
     instance_id: str
     source_config: str
     samba_debug_level: int
@@ -67,6 +68,7 @@ class Config:
     def __init__(
         self,
         *,
+        identity: DaemonIdentity,
         instance_id: str,
         source_config: str,
         domain_member: bool,
@@ -83,6 +85,7 @@ class Config:
         rank_generation: int = -1,
         node_ip: str = '',
     ) -> None:
+        self.identity = identity
         self.instance_id = instance_id
         self.source_config = source_config
         self.domain_member = domain_member
@@ -257,8 +260,9 @@ class CTDBMigrateInitContainer(SambaContainerCommon):
 def _ctdb_args(cfg: Config, args: List[str]) -> List[str]:
     # TODO parametrize pool and object names?
     meta_state_uri = f'rados://.smb/{cfg.instance_id}/cluster.meta.json'
+    unique_name = cfg.identity.daemon_name
     ctdb_args = [
-        f'--hostname={cfg.vhostname}',
+        f'--hostname={unique_name}',
         '--take-node-number-from-env',
         f'--metadata-source={meta_state_uri}',
     ]
@@ -386,6 +390,7 @@ class SMB(ContainerDaemonForm):
             vhostname = f'{instance_id}-{hname}'
 
         self._instance_cfg = Config(
+            identity=self._identity,
             instance_id=instance_id,
             source_config=source_config,
             join_sources=join_sources,
