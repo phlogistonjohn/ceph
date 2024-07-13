@@ -259,28 +259,23 @@ class CTDBMigrateInitContainer(SambaContainerCommon):
         ]
 
 
-def _ctdb_args(cfg: Config, args: List[str]) -> List[str]:
-    # TODO parametrize pool and object names?
-    meta_state_uri = f'rados://.smb/{cfg.instance_id}/cluster.meta.json'
-    unique_name = cfg.identity.daemon_name
-    ctdb_args = [
-        f'--hostname={unique_name}',
-        '--take-node-number-from-env',
-        f'--metadata-source={meta_state_uri}',
-    ]
-    return args + ctdb_args
-
-
 class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
     def name(self) -> str:
         return 'ctdbMustHaveNode'
 
     def args(self) -> List[str]:
-        return (
-            super().args()
-            + _ctdb_args(self.cfg, ['ctdb-must-have-node'])
-            + ['--write-nodes']
-        )
+        args = super().args()
+        unique_name = self.cfg.identity.daemon_name
+        state_uri = self.cfg.cluster_meta_uri
+        args += [
+            'ctdb-must-have-node',
+            # hostname is a misnomer (todo: fix in sambacc)
+            f'--hostname={unique_name}',
+            '--take-node-number-from-env',
+            f'--metadata-source={state_uri}',
+            '--write-nodes',
+        ]
+        return args
 
 
 class CTDBDaemonContainer(SambaContainerCommon):
