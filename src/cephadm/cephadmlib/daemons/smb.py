@@ -291,6 +291,24 @@ class CTDBDaemonContainer(SambaContainerCommon):
         ]
 
 
+class CTDBNodeMonitorContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbNodes'
+
+    def args(self) -> List[str]:
+        args = super().args()
+        unique_name = self.cfg.identity.daemon_name
+        args += [
+            '--debug',
+            'ctdb-monitor-nodes',
+            # hostname is a misnomer (todo: fix in sambacc)
+            f'--hostname={unique_name}',
+            '--take-node-number-from-env',
+            '--reload=all',
+        ]
+        return args
+
+
 class ContainerLayout:
     init_containers: List[SambaContainerCommon]
     primary: SambaContainerCommon
@@ -440,6 +458,7 @@ class SMB(ContainerDaemonForm):
             ]
             ctrs += [
                 CTDBDaemonContainer(self._cfg),
+                CTDBNodeMonitorContainer(self._cfg),
             ]
 
         smbd = SMBDContainer(self._cfg)
