@@ -266,13 +266,11 @@ class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
     def args(self) -> List[str]:
         args = super().args()
         unique_name = self.cfg.identity.daemon_name
-        state_uri = self.cfg.cluster_meta_uri
         args += [
             'ctdb-must-have-node',
             # hostname is a misnomer (todo: fix in sambacc)
             f'--hostname={unique_name}',
             '--take-node-number-from-env',
-            f'--metadata-source={state_uri}',
             '--write-nodes',
         ]
         return args
@@ -606,8 +604,8 @@ class SMB(ContainerDaemonForm):
             'samba-container-config': 'v0',
             'ctdb': {
                 'recovery_lock': '!' + ' '.join(reclock_cmd),
+                'cluster_meta_uri': self._cfg.cluster_meta_uri,
                 # nodes_path ?
-                # cluster_meta_uri ?
             },
         }
         with open(path, 'w') as fh:
