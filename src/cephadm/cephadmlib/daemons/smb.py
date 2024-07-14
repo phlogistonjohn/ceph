@@ -344,6 +344,9 @@ class SMB(ContainerDaemonForm):
         files = data_utils.dict_get(configs, 'files', {})
         ceph_config_entity = configs.get('config_auth_entity', '')
         vhostname = configs.get('virtual_hostname', '')
+        cluster_meta_uri = configs.get('cluster_meta_uri', '')
+        cluster_lock_uri = configs.get('cluster_lock_uri', '')
+
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -375,6 +378,8 @@ class SMB(ContainerDaemonForm):
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
+            cluster_meta_uri=cluster_meta_uri,
+            cluster_lock_uri=cluster_lock_uri,
         )
         if self._rank_info:
             (
