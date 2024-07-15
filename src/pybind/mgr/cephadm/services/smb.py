@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SMBService(CephService):
     TYPE = 'smb'
+    smb_pool = '.smb'
 
     def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
