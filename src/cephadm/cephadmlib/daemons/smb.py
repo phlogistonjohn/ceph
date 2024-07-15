@@ -46,6 +46,7 @@ class Features(enum.Enum):
 
 
 class Config:
+    identity: DaemonIdentity
     instance_id: str
     source_config: str
     samba_debug_level: int
@@ -58,10 +59,16 @@ class Config:
     smb_port: int
     ceph_config_entity: str
     vhostname: str
+    # clustering related values
+    rank: int
+    rank_generation: int
+    cluster_meta_uri: str
+    cluster_lock_uri: str
 
     def __init__(
         self,
         *,
+        identity: DaemonIdentity,
         instance_id: str,
         source_config: str,
         domain_member: bool,
@@ -74,7 +81,12 @@ class Config:
         smb_port: int = 0,
         ceph_config_entity: str = 'client.admin',
         vhostname: str = '',
+        rank: int = -1,
+        rank_generation: int = -1,
+        cluster_meta_uri: str = '',
+        cluster_lock_uri: str = '',
     ) -> None:
+        self.identity = identity
         self.instance_id = instance_id
         self.source_config = source_config
         self.domain_member = domain_member
@@ -87,6 +99,10 @@ class Config:
         self.smb_port = smb_port
         self.ceph_config_entity = ceph_config_entity
         self.vhostname = vhostname
+        self.rank = rank
+        self.rank_generation = rank_generation
+        self.cluster_meta_uri = cluster_meta_uri
+        self.cluster_lock_uri = cluster_lock_uri
 
     def __str__(self) -> str:
         return (
@@ -99,6 +115,8 @@ class Config:
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
         uris.extend(self.user_sources or [])
+        if self.clustered:
+            uris.append('/etc/samba/container/ctdb.json')
         return uris
 
 
@@ -126,8 +144,16 @@ class SambaContainerCommon:
             'SAMBA_CONTAINER_ID': self.cfg.instance_id,
             'SAMBACC_CONFIG': json.dumps(self.cfg.config_uris()),
         }
+        # FIXME cleanup
+        environ['SAMBACC_CTDB'] = 'ctdb-is-experimental'
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
+        if self.cfg.rank >= 0:
+            # how the values are known to ceph (for debugging purposes...)
+            environ['RANK'] = str(self.cfg.rank)
+            environ['RANK_GENERATION'] = str(self.cfg.rank)
+            # samba container specific variant
+            environ['NODE_NUMBER'] = environ['RANK']
         return environ
 
     def envs_list(self) -> List[str]:
@@ -145,12 +171,32 @@ class SambaContainerCommon:
         return []
 
 
+class SambaNetworkedInitContainer(SambaContainerCommon):
+    """SambaContainerCommon subclass that enables additional networking
+    params for an init container by default.
+    NB: By networked we mean needs to use public network resources outside
+    the ceph cluster.
+    """
+
+    def container_args(self) -> List[str]:
+        cargs = _container_dns_args(self.cfg)
+        return cargs + ['--network=host']
+
+
 class SMBDContainer(SambaContainerCommon):
     def name(self) -> str:
         return 'smbd'
 
     def args(self) -> List[str]:
-        return super().args() + ['run', 'smbd']
+        args = super().args()
+        args.append('--debug-delay=30')
+        args.append('run')
+        if self.cfg.clustered:
+            auth_kind = 'nsswitch' if self.cfg.domain_member else 'users'
+            args.append(f'--setup={auth_kind}')
+            args.append('--setup=smb_ctdb')
+        args.append('smbd')
+        return args
 
     def container_args(self) -> List[str]:
         cargs = []
@@ -165,7 +211,12 @@ class WinbindContainer(SambaContainerCommon):
         return 'winbindd'
 
     def args(self) -> List[str]:
-        return super().args() + ['run', 'winbindd']
+        args = super().args()
+        args.append('run')
+        if self.cfg.clustered:
+            args.append('--setup=smb_ctdb')
+        args.append('winbindd')
+        return args
 
 
 class ConfigInitContainer(SambaContainerCommon):
@@ -176,19 +227,15 @@ class ConfigInitContainer(SambaContainerCommon):
         return super().args() + ['init']
 
 
-class MustJoinContainer(SambaContainerCommon):
+class MustJoinContainer(SambaNetworkedInitContainer):
     def name(self) -> str:
         return 'mustjoin'
 
     def args(self) -> List[str]:
-        args = super().args() + ['must-join']
+        args = super().args() + ['--skip-if=env:NODE_NUMBER!=0', 'must-join']
         for join_src in self.cfg.join_sources:
             args.append(f'-j{join_src}')
         return args
-
-    def container_args(self) -> List[str]:
-        cargs = _container_dns_args(self.cfg)
-        return cargs
 
 
 class ConfigWatchContainer(SambaContainerCommon):
@@ -197,6 +244,70 @@ class ConfigWatchContainer(SambaContainerCommon):
 
     def args(self) -> List[str]:
         return super().args() + ['update-config', '--watch']
+
+
+class CTDBMigrateInitContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbMigrate'
+
+    def args(self) -> List[str]:
+        return super().args() + [
+            '--skip-if=env:NODE_NUMBER!=0',
+            'ctdb-migrate',
+            '--dest-dir=/var/lib/ctdb/persistent',
+            '--archive=/var/lib/samba/.migrated',
+        ]
+
+
+class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbMustHaveNode'
+
+    def args(self) -> List[str]:
+        args = super().args()
+        unique_name = self.cfg.identity.daemon_name
+        args += [
+            'ctdb-must-have-node',
+            # hostname is a misnomer (todo: fix in sambacc)
+            f'--hostname={unique_name}',
+            '--take-node-number-from-env',
+            '--write-nodes',
+        ]
+        return args
+
+
+class CTDBDaemonContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbd'
+
+    def args(self) -> List[str]:
+        return super().args() + [
+            'run',
+            'ctdbd',
+            '--setup=smb_ctdb',
+            '--setup=ctdb_config',
+            '--setup=ctdb_etc',
+            '--setup=ctdb_nodes',
+        ]
+
+
+class CTDBNodeMonitorContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'ctdbNodes'
+
+    def args(self) -> List[str]:
+        args = super().args()
+        unique_name = self.cfg.identity.daemon_name
+        args += [
+            '--debug',
+            'ctdb-monitor-nodes',
+            # hostname is a misnomer (todo: fix in sambacc)
+            f'--hostname={unique_name}',
+            '--take-node-number-from-env',
+            '--reload=all',
+            '--write-nodes',
+        ]
+        return args
 
 
 class ContainerLayout:
@@ -234,6 +345,7 @@ class SMB(ContainerDaemonForm):
         self._raw_configs: Dict[str, Any] = context_getters.fetch_configs(ctx)
         self._config_keyring = context_getters.get_config_and_keyring(ctx)
         self._cached_layout: Optional[ContainerLayout] = None
+        self._rank_info = context_getters.fetch_rank_info(ctx)
         self.smb_port = 445
         logger.debug('Created SMB ContainerDaemonForm instance')
 
@@ -251,6 +363,9 @@ class SMB(ContainerDaemonForm):
         files = data_utils.dict_get(configs, 'files', {})
         ceph_config_entity = configs.get('config_auth_entity', '')
         vhostname = configs.get('virtual_hostname', '')
+        cluster_meta_uri = configs.get('cluster_meta_uri', '')
+        cluster_lock_uri = configs.get('cluster_lock_uri', '')
+
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -263,8 +378,6 @@ class SMB(ContainerDaemonForm):
             raise Error(
                 f'invalid instance features: {", ".join(invalid_features)}'
             )
-        if Features.CLUSTERED.value in instance_features:
-            raise NotImplementedError('clustered instance')
         if not vhostname:
             # if a virtual hostname is not provided, generate one by prefixing
             # the cluster/instanced id to the system hostname
@@ -272,6 +385,7 @@ class SMB(ContainerDaemonForm):
             vhostname = f'{instance_id}-{hname}'
 
         self._instance_cfg = Config(
+            identity=self._identity,
             instance_id=instance_id,
             source_config=source_config,
             join_sources=join_sources,
@@ -279,11 +393,18 @@ class SMB(ContainerDaemonForm):
             custom_dns=custom_dns,
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,
-            samba_debug_level=6,
+            samba_debug_level=0,
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
+            cluster_meta_uri=cluster_meta_uri,
+            cluster_lock_uri=cluster_lock_uri,
         )
+        if self._rank_info:
+            (
+                self._instance_cfg.rank,
+                self._instance_cfg.rank_generation,
+            ) = self._rank_info
         self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)
@@ -330,6 +451,16 @@ class SMB(ContainerDaemonForm):
         if self._cfg.domain_member:
             init_ctrs.append(MustJoinContainer(self._cfg))
             ctrs.append(WinbindContainer(self._cfg))
+
+        if self._cfg.clustered:
+            init_ctrs += [
+                CTDBMigrateInitContainer(self._cfg),
+                CTDBMustHaveNodeInitContainer(self._cfg),
+            ]
+            ctrs += [
+                CTDBDaemonContainer(self._cfg),
+                CTDBNodeMonitorContainer(self._cfg),
+            ]
 
         smbd = SMBDContainer(self._cfg)
         self._cached_layout = ContainerLayout(init_ctrs, smbd, ctrs)
@@ -396,7 +527,7 @@ class SMB(ContainerDaemonForm):
         )
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = daemon_to_container(ctx, self, host_network=False)
+        ctr = daemon_to_container(ctx, self, host_network=self._cfg.clustered)
         # We want to share the IPC ns between the samba containers for one
         # instance.  Cephadm's default, host ipc, is not what we want.
         # Unsetting it works fine for podman but docker (on ubuntu 22.04) needs
@@ -453,6 +584,17 @@ class SMB(ContainerDaemonForm):
         mounts[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
         mounts[config] = '/etc/ceph/ceph.conf:z'
         mounts[keyring] = '/etc/ceph/keyring:z'
+        if self._cfg.clustered:
+            ctdb_persistent = str(data_dir / 'ctdb/persistent')
+            ctdb_shared = str(data_dir / 'ctdb/shared')
+            ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
+            ctdb_volatile = str(data_dir / 'ctdb/volatile')
+            ctdb_etc = str(data_dir / 'ctdb/etc')
+            mounts[ctdb_persistent] = '/var/lib/ctdb/persistent'
+            mounts[ctdb_shared] = '/var/lib/ctdb/shared'
+            mounts[ctdb_run] = '/var/run/ctdb'
+            mounts[ctdb_volatile] = '/var/lib/ctdb/volatile'
+            mounts[ctdb_etc] = '/etc/ctdb'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -463,8 +605,33 @@ class SMB(ContainerDaemonForm):
     def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
         self.validate()
         ddir = pathlib.Path(data_dir)
-        file_utils.makedirs(ddir / 'etc-samba-container', uid, gid, 0o770)
+        etc_samba_ctr = ddir / 'etc-samba-container'
+        file_utils.makedirs(etc_samba_ctr, uid, gid, 0o770)
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o770)
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
+        if self._cfg.clustered:
+            file_utils.makedirs(ddir / 'ctdb/persistent', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'ctdb/shared', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
+            self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
+
+    def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
+        reclock_cmd = [
+            '/usr/bin/samba-container',
+            'ctdb-rados-mutex',
+            self._cfg.cluster_lock_uri,
+        ]
+        stub_config = {
+            'samba-container-config': 'v0',
+            'ctdb': {
+                'recovery_lock': '!' + ' '.join(reclock_cmd),
+                'cluster_meta_uri': self._cfg.cluster_meta_uri,
+                # nodes_path ?
+            },
+        }
+        with open(path, 'w') as fh:
+            json.dump(stub_config, fh)
