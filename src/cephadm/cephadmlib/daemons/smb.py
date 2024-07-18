@@ -287,7 +287,6 @@ class CTDBDaemonContainer(SambaContainerCommon):
             '--setup=smb_ctdb',
             '--setup=ctdb_config',
             '--setup=ctdb_etc',
-            '--setup=ctdb_nodes',
         ]
 
 
