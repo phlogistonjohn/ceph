@@ -584,12 +584,10 @@ class SMB(ContainerDaemonForm):
         mounts[keyring] = '/etc/ceph/keyring:z'
         if self._cfg.clustered:
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
-            ctdb_shared = str(data_dir / 'ctdb/shared')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
             ctdb_volatile = str(data_dir / 'ctdb/volatile')
             ctdb_etc = str(data_dir / 'ctdb/etc')
             mounts[ctdb_persistent] = '/var/lib/ctdb/persistent'
-            mounts[ctdb_shared] = '/var/lib/ctdb/shared'
             mounts[ctdb_run] = '/var/run/ctdb'
             mounts[ctdb_volatile] = '/var/lib/ctdb/volatile'
             mounts[ctdb_etc] = '/etc/ctdb'
@@ -611,7 +609,6 @@ class SMB(ContainerDaemonForm):
             file_utils.populate_files(data_dir, self._files, uid, gid)
         if self._cfg.clustered:
             file_utils.makedirs(ddir / 'ctdb/persistent', uid, gid, 0o770)
-            file_utils.makedirs(ddir / 'ctdb/shared', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
