@@ -146,6 +146,7 @@ class SambaContainerCommon:
         }
         # FIXME cleanup
         environ['SAMBACC_CTDB'] = 'ctdb-is-experimental'
+        environ['CTDB_NODES_LIST'] = '!/etc/ctdb/list_nodes.sh'
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
         if self.cfg.rank >= 0:
@@ -630,7 +631,7 @@ class SMB(ContainerDaemonForm):
             'ctdb': {
                 'recovery_lock': '!' + ' '.join(reclock_cmd),
                 'cluster_meta_uri': self._cfg.cluster_meta_uri,
-                # nodes_path ?
+                'nodes_cmd': '/etc/ctdb/list_nodes.sh',
             },
         }
         with open(path, 'w') as fh:
