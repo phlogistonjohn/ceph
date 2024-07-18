@@ -587,10 +587,10 @@ class SMB(ContainerDaemonForm):
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
             ctdb_volatile = str(data_dir / 'ctdb/volatile')
             ctdb_etc = str(data_dir / 'ctdb/etc')
-            mounts[ctdb_persistent] = '/var/lib/ctdb/persistent'
-            mounts[ctdb_run] = '/var/run/ctdb'
-            mounts[ctdb_volatile] = '/var/lib/ctdb/volatile'
-            mounts[ctdb_etc] = '/etc/ctdb'
+            mounts[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
+            mounts[ctdb_run] = '/var/run/ctdb:z'
+            mounts[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
+            mounts[ctdb_etc] = '/etc/ctdb:z'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
