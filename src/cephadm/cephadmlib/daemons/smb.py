@@ -272,7 +272,6 @@ class CTDBMustHaveNodeInitContainer(SambaContainerCommon):
             # hostname is a misnomer (todo: fix in sambacc)
             f'--hostname={unique_name}',
             '--take-node-number-from-env',
-            '--write-nodes',
         ]
         return args
 
@@ -306,7 +305,6 @@ class CTDBNodeMonitorContainer(SambaContainerCommon):
             f'--hostname={unique_name}',
             '--take-node-number-from-env',
             '--reload=all',
-            '--write-nodes',
         ]
         return args
 
