@@ -311,6 +311,13 @@ class CTDBDaemonContainer(SambaContainerCommon):
             '--setup=ctdb_etc',
         ]
 
+    def container_args(self) -> List[str]:
+        cargs = super().container_args()
+        # make conditional?
+        # net admin is needed for event script to add public ips to iface
+        cargs.append('--cap-add=NET_ADMIN')
+        return cargs
+
 
 class CTDBNodeMonitorContainer(SambaContainerCommon):
     def name(self) -> str:
