@@ -22,7 +22,7 @@ class Steps:
     CONFIGURE = "configure"
     BUILD = "build"
     BUILD_TESTS = "buildtests"
-    TESTS = 'tests'
+    TESTS = "tests"
     FREE_FORM = "free_form"
 
 
@@ -63,7 +63,9 @@ class Context:
     @property
     def dnf_cache_dir(self):
         if self.cli.dnf_cache_path and self.distro_cache_name:
-            return pathlib.Path(self.cli.dnf_cache_path) / self.distro_cache_name
+            return (
+                pathlib.Path(self.cli.dnf_cache_path) / self.distro_cache_name
+            )
         return None
 
 
@@ -74,13 +76,13 @@ class Builder:
         self._did_steps = set()
 
     def wants(self, step, ctx, *, force=False):
-        log.info('want to execute build step: %s', step)
+        log.info("want to execute build step: %s", step)
         if step in self._did_steps:
-            log.info('step already done: %s', step)
+            log.info("step already done: %s", step)
             return
         self._steps[step](ctx)
         self._did_steps.add(step)
-        log.info('step done: %s', step)
+        log.info("step done: %s", step)
 
     def available_steps(self):
         return [str(k) for k in self._steps]
@@ -91,6 +93,7 @@ class Builder:
             self._steps[step] = f
             f._for_step = step
             return f
+
         return wrap
 
 
@@ -233,7 +236,8 @@ def parse_cli(build_step_names):
         "--debug", action="store_true", help="Emit debugging level logging"
     )
     parser.add_argument(
-        "--container-engine", help="Select container engine to use (eg. podman, docker)"
+        "--container-engine",
+        help="Select container engine to use (eg. podman, docker)",
     )
     parser.add_argument(
         "--cwd", help="Change working directory before executing commands"
@@ -250,10 +254,15 @@ def parse_cli(build_step_names):
     parser.add_argument(
         "--homedir", default="/build", help="Container image home/build dir"
     )
-    parser.add_argument("--dnf-cache-path", help="DNF caching using provided base dir")
+    parser.add_argument(
+        "--dnf-cache-path", help="DNF caching using provided base dir"
+    )
     parser.add_argument("--build-dir", "-b", help="Specify a build directory")
     parser.add_argument(
-        "--extra", "-x", action='append', help="Specify an extra argument to pass to container command"
+        "--extra",
+        "-x",
+        action="append",
+        help="Specify an extra argument to pass to container command",
     )
     parser.add_argument(
         "--keep-container",
@@ -261,7 +270,10 @@ def parse_cli(build_step_names):
         help="Skip removing container after executing command",
     )
     parser.add_argument(
-        "steps", nargs='*', choices=build_step_names, help='List of build steps to execute',
+        "steps",
+        nargs="*",
+        choices=build_step_names,
+        help="List of build steps to execute",
     )
     parser.add_argument("args", nargs="?", help="Build command")
     return parser.parse_args()
