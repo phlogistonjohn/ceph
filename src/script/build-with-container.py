@@ -16,6 +16,54 @@ DISTROS = [
 ]
 
 
+def _cmdstr(cmd):
+    return " ".join(shlex.quote(c) for c in cmd)
+
+
+def _run(cmd, *args, **kwargs):
+    log.info("Executing command: %s", _cmdstr(cmd))
+    return subprocess.run(cmd, *args, **kwargs)
+
+
+def _container_cmd(ctx, args):
+    rm_container = not ctx.cli.keep_container
+    cmd = [
+        ctx.container_engine,
+        "run",
+        "--name=ceph_build",
+    ]
+    if rm_container:
+        cmd.append("--rm")
+    if "podman" in ctx.container_engine:
+        cmd.append("--pids-limit=-1")
+    if ctx.map_user:
+        cmd.append("--user=0")
+    cwd = pathlib.Path(".").absolute()
+    cmd += [
+        f"--volume={cwd}:{ctx.cli.homedir}:Z",
+        f"-eHOMEDIR={ctx.cli.homedir}",
+    ]
+    if ctx.cli.build_dir:
+        cmd.append(f"-eBUILD_DIR={ctx.cli.build_dir}")
+    for extra_arg in ctx.cli.extra or []:
+        cmd.append(extra_arg)
+    cmd.append(ctx.image_name)
+    cmd.extend(args)
+    return cmd
+
+
+def _git_command(ctx, args):
+    cmd = ['git']
+    cmd.extend(args)
+    return cmd
+
+
+def _git_current_branch(ctx):
+    cmd = _git_command(ctx, ['rev-parse',  '--abbrev-ref', 'HEAD'])
+    res = _run(cmd, check=True, capture_output=True)
+    return res.stdout.decode('utf8').strip()
+
+
 class Steps:
     DNF_CACHE = "dnfcache"
     CONTAINER = "container"
@@ -50,7 +98,16 @@ class Context:
 
     @property
     def image_name(self):
-        return "ceph-build:wip"
+        return "ceph-build:" + self.target_tag()
+
+    def target_tag(self):
+        if self.cli.tag:
+            return self.cli.tag
+        try:
+            branch = _git_current_branch(self).replace('/', '-')
+        except subprocess.CalledProcessError:
+            branch = 'UNKNOWN'
+        return f"{branch}.{self.cli.distro}"
 
     @property
     def from_image(self):
@@ -68,6 +125,11 @@ class Context:
             )
         return None
 
+    @property
+    def map_user(self):
+        # TODO: detect if uid mapping is needed
+        return os.getuid() != 0
+
 
 class Builder:
     _steps = {}
@@ -75,8 +137,11 @@ class Builder:
     def __init__(self):
         self._did_steps = set()
 
-    def wants(self, step, ctx, *, force=False):
+    def wants(self, step, ctx, *, force=False, top=False):
         log.info("want to execute build step: %s", step)
+        if ctx.cli.no_prereqs and not top:
+            log.info("Running prerequisite steps disabled")
+            return
         if step in self._did_steps:
             log.info("step already done: %s", step)
             return
@@ -95,47 +160,6 @@ class Builder:
             return f
 
         return wrap
-
-
-def _cmdstr(cmd):
-    return " ".join(shlex.quote(c) for c in cmd)
-
-
-def _run(cmd, *args, **kwargs):
-    log.info("Executing command: %s", _cmdstr(cmd))
-    subprocess.run(cmd, *args, **kwargs)
-
-
-def _tag(cli):
-    if cli.tag:
-        return cli.tag
-    branch = "TODO"
-    return f"{branch}.{cli.distro}"
-
-
-def _container_cmd(ctx, args):
-    rm_container = not ctx.cli.keep_container
-    cmd = [
-        ctx.container_engine,
-        "run",
-        "--name=ceph_build",
-    ]
-    if rm_container:
-        cmd.append("--rm")
-    if "podman" in ctx.container_engine:
-        cmd.append("--pids-limit=-1")
-    cwd = pathlib.Path(".").absolute()
-    cmd += [
-        f"--volume={cwd}:{ctx.cli.homedir}:Z",
-        f"-eHOMEDIR={ctx.cli.homedir}",
-    ]
-    if ctx.cli.build_dir:
-        cmd.append(f"-eBUILD_DIR={ctx.cli.build_dir}")
-    for extra_arg in ctx.cli.extra or []:
-        cmd.append(extra_arg)
-    cmd.append(ctx.image_name)
-    cmd.extend(args)
-    return cmd
 
 
 @Builder.set(Steps.DNF_CACHE)
@@ -270,13 +294,22 @@ def parse_cli(build_step_names):
         help="Skip removing container after executing command",
     )
     parser.add_argument(
-        "steps",
-        nargs="*",
-        choices=build_step_names,
-        help="List of build steps to execute",
+        "--no-prereqs",
+        "-P",
+        action="store_true",
+        help="Do not execute any prerequisite steps. Only execute specified steps",
     )
-    parser.add_argument("args", nargs="?", help="Build command")
-    return parser.parse_args()
+    parser.add_argument(
+        "--execute",
+        "-e",
+        dest="steps",
+        action='append',
+        choices=build_step_names,
+        help="Execute the target build step(s)",
+    )
+    cli, rest = parser.parse_known_args()
+    cli.remaining_args = rest
+    return cli
 
 
 def _src_root():
@@ -304,7 +337,7 @@ def main():
     ctx = Context(cli)
     ctx.build = builder
     for step in cli.steps or [Steps.BUILD]:
-        ctx.build.wants(step, ctx)
+        ctx.build.wants(step, ctx, top=True)
 
 
 if __name__ == "__main__":
