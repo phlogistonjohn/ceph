@@ -2879,6 +2879,7 @@ class SMBClusterPublicIPSpec:
         # a netmask
         self.address = self._addr_iface.with_prefixlen
 
+        self._destinations = []
         if not self.destination:
             return
         if isinstance(self.destination, str):
@@ -2891,7 +2892,6 @@ class SMBClusterPublicIPSpec:
             raise ValueError(
                 'destination field must be a string or list of strings'
             )
-        self._destinations = []
         for dest in _dests:
             try:
                 dnet = ip_network(dest)
