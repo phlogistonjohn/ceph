@@ -2946,7 +2946,7 @@ class SMBClusterPublicIPSpec:
     @classmethod
     def convert_list(
         cls, arg: Optional[List[Any]]
-    ) -> Optional[List[SMBClusterPublicIPSpec]]:
+    ) -> Optional[List['SMBClusterPublicIPSpec']]:
         if arg is None:
             return None
         assert isinstance(arg, list)
