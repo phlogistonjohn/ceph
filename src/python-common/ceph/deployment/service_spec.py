@@ -2856,8 +2856,6 @@ class SMBClusterPublicIPSpec:
     ) -> None:
         self.address = address
         self.destination = destination
-        self._vip_iface = None
-        self._destinations = []
         self.validate()
 
     def validate(self) -> None:
@@ -2872,14 +2870,15 @@ class SMBClusterPublicIPSpec:
         # require prefix lengths just like ctdb itself does.
         try:
             # cache the parsed interface address internally
-            self._vip_iface = ip_interface(self.address)
+            self._addr_iface = ip_interface(self.address)
         except ValueError as err:
             raise SpecValidationError(
                 f'Cannot parse interface address {self.address}'
             ) from err
         # we strongly prefer /{prefixlen} form, even if the user supplied
         # a netmask
-        self.destination = self._vip_iface.with_prefixlen
+        self.address = self._addr_iface.with_prefixlen
+
         if not self.destination:
             return
         if isinstance(self.destination, str):
@@ -2916,9 +2915,9 @@ class SMBClusterPublicIPSpec:
             f'SMBClusterPublicIPSpec({self.address!r}, {self.destination!r})'
         )
 
-    def to_json(self) -> Union[str, Dict[str, Any]]:
+    def to_json(self) -> Dict[str, Any]:
         """Return a json-compatible represenation of the SMBClusterPublicIPSpec."""
-        out = {'address': self.address}
+        out: Dict[str, Any] = {'address': self.address}
         if self.destination:
             out['destination'] = self.destination
         return out
@@ -2928,9 +2927,12 @@ class SMBClusterPublicIPSpec:
         the spec. This is not round-tripable.
         """
         # The strict form always contains destination as a list of strings.
+        dests = [n.with_prefixlen for n in self._destinations]
+        if not dests:
+            dests = [self._addr_iface.network.with_prefixlen]
         return {
             'address': self.address,
-            'destinations': [n.with_prefixlen for n in self._destinations],
+            'destinations': dests,
         }
 
     @classmethod
@@ -2940,6 +2942,15 @@ class SMBClusterPublicIPSpec:
                 'SMB cluster public IP spec missing required field: address'
             )
         return cls(spec['address'], spec.get('destination'))
+
+    @classmethod
+    def convert_list(
+        cls, arg: Optional[List[Any]]
+    ) -> Optional[List[SMBClusterPublicIPSpec]]:
+        if arg is None:
+            return None
+        assert isinstance(arg, list)
+        return [cls.from_json(v) for v in arg]
 
 
 class SMBSpec(ServiceSpec):
@@ -3029,7 +3040,9 @@ class SMBSpec(ServiceSpec):
         self.include_ceph_users = include_ceph_users or []
         self.cluster_meta_uri = cluster_meta_uri
         self.cluster_lock_uri = cluster_lock_uri
-        self.cluster_public_addrs = cluster_public_addrs
+        self.cluster_public_addrs = SMBClusterPublicIPSpec.convert_list(
+            cluster_public_addrs
+        )
         self.validate()
 
     def validate(self) -> None:
@@ -3073,6 +3086,18 @@ class SMBSpec(ServiceSpec):
         parts[-1] = objname
         uri = 'rados://' + '/'.join(parts)
         return uri
+
+    def strict_cluster_ip_specs(self) -> List[Dict[str, Any]]:
+        return [s.to_strict() for s in (self.cluster_public_addrs or [])]
+
+    def to_json(self) -> OrderedDict[str, Any]:
+        obj = super().to_json()
+        spec = obj.get('spec')
+        if spec and spec.get('cluster_public_addrs'):
+            spec['cluster_public_addrs'] = [
+                a.to_json() for a in spec['cluster_public_addrs']
+            ]
+        return obj
 
 
 yaml.add_representer(SMBSpec, ServiceSpec.yaml_representer)
