@@ -1,0 +1,3 @@
+FROM quay.io/centos/centos:stream8
+
+RUN . /etc/os-release ; if [ "$ID" = centos -a "$VERSION" = 8 ]; then find /etc/yum.repos.d/ -name '*.repo' -exec sed -i -e 's|^mirrorlist=|#mirrorlist=|g' -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://vault.centos.org|g'  {} \; ; fi
