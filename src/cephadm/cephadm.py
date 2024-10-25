@@ -185,6 +185,7 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
+from cephadmlib import mount
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -4726,6 +4727,16 @@ def command_maintenance(ctx: CephadmContext) -> int:
     return 0
 
 
+def command_mount(ctx: CephadmContext) -> int:
+    mount.manage_mounts(
+        ctx.location,
+        ctx.mode,
+        requests=ctx.requests,
+        delay_sec=ctx.monitor_delay
+    )
+    return 0
+
+
 def change_maintenance_mode(ctx: CephadmContext) -> str:
     if not ctx.fsid:
         raise Error('failed - must pass --fsid to specify cluster')
@@ -5554,6 +5565,12 @@ def _get_parser():
     parser_list_images = subparsers.add_parser(
         'list-images', help='list all the default images')
     parser_list_images.set_defaults(func=command_list_images)
+
+    parser_mount = subparsers.add_parser(
+        '_mount',
+    )
+    mount.cli_arguments(parser_mount)
+    parser_mount.set_defaults(func=command_mount)
     return parser
 
 
