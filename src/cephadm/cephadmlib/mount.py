@@ -1,4 +1,4 @@
-from typing import Optional, Iterable, List, Any, Union
+from typing import Optional, Iterable, Iterator, List, Any, Union
 
 import enum
 import errno
@@ -8,6 +8,9 @@ import os
 import pathlib
 import subprocess
 import time
+
+from .context import CephadmContext
+
 
 PathLike = Union[os.PathLike, str]
 
@@ -90,6 +93,11 @@ class ManagedMounts:
     def flush(self) -> None:
         self._requests = []
 
+    def refresh(self, requests: Iterable[Request]) -> None:
+        self.flush()
+        for req in requests:
+            self.add(req)
+
     def scan(self) -> None:
         root_stat = self._rootdir.stat()
         mounted_paths = [
@@ -168,6 +176,30 @@ def _remove_dir(path: pathlib.Path, max_tries: int = 30) -> None:
     raise last_err
 
 
+def discover_cephfs_volumes(user: str) -> List[Request]:
+    import rados
+
+    mcmd = json.dumps({'prefix': 'fs volume ls'})
+    with rados.Rados(conffile=rados.Rados.DEFAULT_CONF_FILES) as rc:
+        ret, out, err = rc.mon_command(mcmd, b'')
+        logger.debug('fs-volume-ls response: %r %r %r', ret, out, err)
+    if ret != 0:
+        raise RuntimeError(err)
+    values = json.loads(out.decode('utf8'))
+    assert isinstance(values, list)
+    reqs: List[Request] = []
+    for value in values:
+        assert isinstance(value, dict)
+        name = value['name']
+        reqs.append(
+            CephFSRequest(
+                source=f'{user}@.{name}=/',
+                name=name,
+            )
+        )
+    return reqs
+
+
 class Modes(str, enum.Enum):
     MOUNT = 'mount'
     CLEANUP = 'cleanup'
@@ -186,11 +218,34 @@ def cli_arguments(parser: Any) -> None:
         choices=[str(v) for v in (Modes.MOUNT, Modes.CLEANUP, Modes.MONITOR)],
         default=Modes.MOUNT,
     )
+    parser.add_argument('--auto-cephfs', action='store_true')
+    parser.add_argument('--auto-user', default='admin')
     parser.add_argument('--monitor-delay', type=int, default=60)
 
 
+def manage_mounts_by_ctx(ctx: CephadmContext) -> None:
+    def _requests() -> Iterator[List[Request]]:
+        while True:
+            requests = []
+            if ctx.auto_cephfs:
+                requests.extend(discover_cephfs_volumes(ctx.auto_user))
+            if ctx.cephfs:
+                requests.extend(list(ctx.cephfs))
+            yield requests
+
+    manage_mounts(
+        ctx.location,
+        ctx.mode,
+        requests=_requests(),
+        delay_sec=ctx.monitor_delay,
+    )
+
+
 def manage_mounts(
-    location: str, mode: str, requests: List[Request], delay_sec: int = 60
+    location: str,
+    mode: str,
+    requests: Iterator[List[Request]],
+    delay_sec: int = 60,
 ) -> None:
     _mode = Modes(mode)
     mm = ManagedMounts(location)
@@ -198,16 +253,14 @@ def manage_mounts(
         mm.update()
         return
     if _mode is Modes.MOUNT:
-        for req in requests:
-            mm.add(req)
+        mm.refresh(next(requests))
         mm.scan()
         mm.update()
         return
     if _mode is Modes.MONITOR:
-        for req in requests:
-            mm.add(req)
         try:
             while True:
+                mm.refresh(next(requests))
                 mm.update()
                 time.sleep(delay_sec)
         except KeyboardInterrupt:
