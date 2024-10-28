@@ -4729,6 +4729,7 @@ def command_maintenance(ctx: CephadmContext) -> int:
 
 @executes_early
 def command_mount(ctx: CephadmContext) -> int:
+    cephadm_init_logging(ctx, logger, sys.argv[1:])
     requests = list(ctx.cephfs or [])
     mount.manage_mounts(
         ctx.location,
