@@ -21,7 +21,7 @@ class Request:
         fstype: str,
         source: str,
         name: str,
-        options: Optional[Iterable[str]],
+        options: Optional[Iterable[str]] = None,
     ) -> None:
         self.fstype = fstype
         self.source = source
@@ -48,9 +48,9 @@ class CephFSRequest(Request):
         self,
         source: str,
         name: str,
-        options: Optional[Iterable[str]],
+        options: Optional[Iterable[str]] = None,
     ) -> None:
-        super().__init__('cephfs', source, name, options)
+        super().__init__('ceph', source, name, options)
 
     @classmethod
     def parse(cls, value: str) -> 'CephFSRequest':
@@ -183,7 +183,7 @@ def cli_arguments(parser: Any) -> None:
     parser.add_argument(
         '-m',
         '--mode',
-        choices=[Modes.MOUNT, Modes.CLEANUP, Modes.MONITOR],
+        choices=[str(v) for v in (Modes.MOUNT, Modes.CLEANUP, Modes.MONITOR)],
         default=Modes.MOUNT,
     )
     parser.add_argument('--monitor-delay', type=int, default=60)
