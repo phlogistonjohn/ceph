@@ -4727,11 +4727,13 @@ def command_maintenance(ctx: CephadmContext) -> int:
     return 0
 
 
+@executes_early
 def command_mount(ctx: CephadmContext) -> int:
+    requests = list(ctx.cephfs or [])
     mount.manage_mounts(
         ctx.location,
         ctx.mode,
-        requests=ctx.requests,
+        requests=requests,
         delay_sec=ctx.monitor_delay
     )
     return 0
