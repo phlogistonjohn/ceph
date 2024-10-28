@@ -1,11 +1,15 @@
-from typing import Optional, Iterable
+from typing import Optional, Iterable, List, Any, Union
 
+import enum
+import errno
+import json
 import logging
 import os
 import pathlib
 import subprocess
+import time
 
-from os import PathLike
+PathLike = Union[os.PathLike, str]
 
 
 logger = logging.getLogger()
@@ -26,7 +30,7 @@ class Request:
 
     @property
     def mount_options(self) -> str:
-        opts = set(self._options)
+        opts = set(self.options)
         opts.add('noexec')
         opts.add('_netdev')
         return ','.join(sorted(opts))
@@ -48,13 +52,27 @@ class CephFSRequest(Request):
     ) -> None:
         super().__init__('cephfs', source, name, options)
 
+    @classmethod
+    def parse(cls, value: str) -> 'CephFSRequest':
+        kwargs = {}
+        if value.startswith('{') and value.endswith('}'):
+            kwargs = json.loads(value)
+            return cls(**kwargs)
+        parts = value.split(';')
+        for part in parts:
+            if part.startswith('source='):
+                kwargs['source'] = part.split('=', 1)[1]
+            if part.startswith('name='):
+                kwargs['name'] = part.split('=', 1)[1]
+            if part.startswith('options='):
+                kwargs['options'] = part.split('=', 1)[1]
+        return cls(**kwargs)
+
 
 class PlaceholderRequest(Request):
     def __init__(
         self,
-        source: str,
         name: str,
-        options: Optional[Iterable[str]],
     ) -> None:
         super().__init__('none', '<unknown>', name, None)
 
@@ -62,7 +80,7 @@ class PlaceholderRequest(Request):
 class ManagedMounts:
     def __init__(self, rootdir: PathLike) -> None:
         self._rootdir = pathlib.Path(rootdir)
-        self._requests = []
+        self._requests: List[Request] = []
 
     def add(self, req: Request) -> None:
         if req.name in {r.name for r in self._requests}:
@@ -90,7 +108,7 @@ class ManagedMounts:
         for req in self._requests:
             mnt_path = self._rootdir / req.name
             mnt_path.mkdir(exist_ok=True)
-            if _same_fs(self._rootidr, mnt_path, parent_stat=root_stat):
+            if _same_fs(self._rootdir, mnt_path, parent_stat=root_stat):
                 # (new) unmounted dir
                 _mount(mnt_path, req)
             expected.add(mnt_path)
@@ -150,10 +168,13 @@ def _remove_dir(path: pathlib.Path, max_tries: int = 30) -> None:
     raise last_err
 
 
-class Modes(enum.StrEnum):
+class Modes(str, enum.Enum):
     MOUNT = 'mount'
     CLEANUP = 'cleanup'
     MONITOR = 'monitor'
+
+    def __str__(self) -> str:
+        return self.value
 
 
 def cli_arguments(parser: Any) -> None:
