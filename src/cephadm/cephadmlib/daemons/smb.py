@@ -42,6 +42,7 @@ _MUTEX_SUBCMD = [_SCC, 'ctdb-rados-mutex']  # requires rados uri
 class Features(enum.Enum):
     DOMAIN = 'domain'
     CLUSTERED = 'clustered'
+    FSMOUNTS = 'fsmounts'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -76,6 +77,7 @@ class Config:
     debug_delay: int
     domain_member: bool
     clustered: bool
+    fs_mounts: bool
     join_sources: List[str]
     user_sources: List[str]
     custom_dns: List[str]
@@ -98,6 +100,7 @@ class Config:
         source_config: str,
         domain_member: bool,
         clustered: bool,
+        fs_mounts: bool,
         samba_debug_level: int = 0,
         ctdb_log_level: str = '',
         debug_delay: int = 0,
@@ -120,6 +123,7 @@ class Config:
         self.source_config = source_config
         self.domain_member = domain_member
         self.clustered = clustered
+        self.fs_mounts = fs_mounts
         self.samba_debug_level = samba_debug_level
         self.ctdb_log_level = ctdb_log_level
         self.debug_delay = debug_delay
@@ -323,6 +327,13 @@ class SMBMetricsContainer(ContainerCommon):
         return args
 
 
+class FSMountContainer(ContainerCommon):
+    def name(self) -> str:
+        return 'fsmount'
+
+
+
+
 class CTDBMigrateInitContainer(SambaContainerCommon):
     def name(self) -> str:
         return 'ctdbMigrate'
@@ -511,6 +522,7 @@ class SMB(ContainerDaemonForm):
             custom_dns=custom_dns,
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,
+            fs_mounts=Features.FSMOUNTS.value in instance_features,
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
