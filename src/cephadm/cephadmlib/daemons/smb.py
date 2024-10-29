@@ -13,7 +13,7 @@ from .. import data_utils
 from .. import deployment_utils
 from .. import file_utils
 from ..call_wrappers import call, CallVerbosity
-from ..constants import DEFAULT_SMB_IMAGE
+from ..constants import DEFAULT_IMAGE, DEFAULT_SMB_IMAGE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_engines import Podman
 from ..container_types import (
@@ -86,6 +86,7 @@ class Config:
     vhostname: str
     metrics_image: str
     metrics_port: int
+    fs_mount_image: str
     # clustering related values
     rank: int
     rank_generation: int
@@ -112,6 +113,7 @@ class Config:
         vhostname: str = '',
         metrics_image: str = '',
         metrics_port: int = 0,
+        fs_mount_image: str = '',
         rank: int = -1,
         rank_generation: int = -1,
         cluster_meta_uri: str = '',
@@ -135,6 +137,7 @@ class Config:
         self.vhostname = vhostname
         self.metrics_image = metrics_image
         self.metrics_port = metrics_port
+        self.fs_mount_image = fs_mount_image
         self.rank = rank
         self.rank_generation = rank_generation
         self.cluster_meta_uri = cluster_meta_uri
@@ -331,7 +334,18 @@ class FSMountContainer(ContainerCommon):
     def name(self) -> str:
         return 'fsmount'
 
+    def args(self) -> List[str]:
+        args = super().args()
+        args.append('-mmonitor')
+        args.append('--location=/srv')
+        args.append('--auto-cephfs')
+        args.append('--auto-user=FIXME')
+        return args
 
+    def container_args(self) -> List[str]:
+        args = super().container_args()
+        args.append('--entrypoint=/usr/bin/cephadm')
+        return args
 
 
 class CTDBMigrateInitContainer(SambaContainerCommon):
@@ -486,6 +500,7 @@ class SMB(ContainerDaemonForm):
         vhostname = configs.get('virtual_hostname', '')
         metrics_image = configs.get('metrics_image', '')
         metrics_port = int(configs.get('metrics_port', '0'))
+        fs_mount_image = configs.get('fs_mount_image', '')
         cluster_meta_uri = configs.get('cluster_meta_uri', '')
         cluster_lock_uri = configs.get('cluster_lock_uri', '')
         cluster_public_addrs = configs.get('cluster_public_addrs', [])
@@ -528,6 +543,7 @@ class SMB(ContainerDaemonForm):
             vhostname=vhostname,
             metrics_image=metrics_image,
             metrics_port=metrics_port,
+            fs_mount_image=fs_mount_image,
             cluster_meta_uri=cluster_meta_uri,
             cluster_lock_uri=cluster_lock_uri,
             cluster_public_addrs=_public_addrs,
@@ -588,6 +604,10 @@ class SMB(ContainerDaemonForm):
         metrics_port = self._cfg.metrics_port
         if metrics_image and metrics_port > 0:
             ctrs.append(SMBMetricsContainer(self._cfg, metrics_image))
+
+        if self._cfg.fs_mounts:
+            fs_mount_image = self._cfg.fs_mount_image or DEFAULT_IMAGE
+            ctrs.append(FSMountContainer(self._cfg, fs_mount_image))
 
         if self._cfg.clustered:
             init_ctrs += [
@@ -743,6 +763,9 @@ class SMB(ContainerDaemonForm):
             # be replaced by a less "leaky" approach in the managed containers.
             ctdb_smb_conf = str(data_dir / 'ctdb/smb.conf')
             mounts[ctdb_smb_conf] = '/etc/samba/smb.conf:z'
+        if self._cfg.fsmounts:
+            srv_dir = str(data_dir / 'srv')
+            mounts[srv_dir] = '/srv:shared'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -769,6 +792,8 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
             self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
             self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
+        if self._cfg.fsmounts:
+            file_utils.makedirs(ddir / 'srv', uid, gid, 0o775)
 
     def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
         reclock_cmd = ' '.join(_MUTEX_SUBCMD + [self._cfg.cluster_lock_uri])
