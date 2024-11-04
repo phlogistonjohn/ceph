@@ -110,10 +110,13 @@ class Mount:
 
 def mount_arguments(mounts: Iterable[Mountable]) -> List[str]:
     """Convert mountable objects into a list of arguments for podman/docker."""
-    return [_mount_option(m) for m in mounts]
+    args = []
+    for mount in mounts:
+        args.extend(_mount_option(mount))
+    return args
 
 
-def _mount_option(mount: Mountable) -> str:
+def _mount_option(mount: Mountable) -> List[str]:
     _fs_type = getattr(mount, 'fs_type', None)
     _fs_mo = getattr(mount, 'fs_mount_options', None)
     if _fs_type and _fs_mo:
@@ -129,15 +132,15 @@ def _mount_option(mount: Mountable) -> str:
 
 def _fs_mount_option(
     fs_type: str, fs_mount_options: List[Tuple[str, str]]
-) -> str:
+) -> List[str]:
     options = [('type', fs_type)]
     options.extend(fs_mount_options)
     args = ','.join(f'{k}={v}' for (k, v) in options)
-    return f'--mount={args}'
+    return ['--mount', args]
 
 
-def _vol_mount_option(src: str, dst: str, vol_flags: List[str]) -> str:
+def _vol_mount_option(src: str, dst: str, vol_flags: List[str]) -> List[str]:
     _options = ''
     if vol_flags:
         _options = ':' + ','.join(vol_flags)
-    return f'--volume={src}:{dst}{_options}'
+    return ['-v', f'{src}:{dst}{_options}']
