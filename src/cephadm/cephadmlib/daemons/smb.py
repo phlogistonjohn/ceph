@@ -6,7 +6,7 @@ import pathlib
 import re
 import socket
 
-from typing import List, Dict, Tuple, Optional, Any, NamedTuple
+from typing import List, Dict, Tuple, Optional, Any, NamedTuple, Union
 
 from .. import context_getters
 from .. import daemon_form
@@ -31,6 +31,7 @@ from ..deploy import DeploymentType
 from ..exceptions import Error
 from ..host_facts import list_networks
 from ..net_utils import EndPoint
+from ..volume_types import Mount, RelabelOpt
 
 
 logger = logging.getLogger()
@@ -648,39 +649,8 @@ class SMB(ContainerDaemonForm):
         mounts: AvailableContainerMounts,
     ) -> None:
         self.validate()
-        ms = mounts.volume_mounts
         data_dir = pathlib.Path(self.identity.data_dir(ctx.data_dir))
-        etc_samba_ctr = str(data_dir / 'etc-samba-container')
-        lib_samba = str(data_dir / 'lib-samba')
-        run_samba = str(data_dir / 'run')
-        config = str(data_dir / 'config')
-        keyring = str(data_dir / 'keyring')
-        ms[etc_samba_ctr] = '/etc/samba/container:z'
-        ms[lib_samba] = '/var/lib/samba:z'
-        ms[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
-        ms[config] = '/etc/ceph/ceph.conf:z'
-        ms[keyring] = '/etc/ceph/keyring:z'
-        if self._cfg.clustered:
-            ctdb_persistent = str(data_dir / 'ctdb/persistent')
-            ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
-            ctdb_volatile = str(data_dir / 'ctdb/volatile')
-            ctdb_etc = str(data_dir / 'ctdb/etc')
-            ms[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
-            ms[ctdb_run] = '/var/run/ctdb:z'
-            ms[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
-            ms[ctdb_etc] = '/etc/ctdb:z'
-            # create a shared smb.conf file for our clustered instances.
-            # This is a HACK that substitutes for a bunch of architectural
-            # changes to sambacc *and* smbmetrics (container). In short,
-            # sambacc can set up the correct cluster enabled conf file for
-            # samba daemons (smbd, winbindd, etc) but not it's own long running
-            # tasks.  Similarly, the smbmetrics container always uses the
-            # registry conf (non-clustered). Having cephadm create a stub
-            # config that will share the file across all containers is a
-            # stopgap that resolves the problem for now, but should eventually
-            # be replaced by a less "leaky" approach in the managed containers.
-            ctdb_smb_conf = str(data_dir / 'ctdb/smb.conf')
-            ms[ctdb_smb_conf] = '/etc/samba/smb.conf:z'
+        mounts.mounts.extend(_samba_mounts(self._cfg, data_dir))
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -694,18 +664,16 @@ class SMB(ContainerDaemonForm):
     def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
         self.validate()
         ddir = pathlib.Path(data_dir)
-        etc_samba_ctr = ddir / 'etc-samba-container'
-        file_utils.makedirs(etc_samba_ctr, uid, gid, 0o770)
-        file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o770)
-        file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
+        mounts = _samba_mounts(self._cfg, ddir)
+        for mount in mounts:
+            if isinstance(mount, _Mount) and mount.dir_mode:
+                file_utils.makedirs(mount.path(), uid, gid, mount.dir_mode)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
         if self._cfg.clustered:
-            file_utils.makedirs(ddir / 'ctdb/persistent', uid, gid, 0o770)
-            file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
-            file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
-            file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
-            self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
+            self._write_ctdb_stub_config(
+                ddir / 'etc-samba-container/ctdb.json'
+            )
             self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
 
     def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
@@ -784,3 +752,64 @@ class _NetworkMapper:
             {'address': a.address, 'interfaces': a.destinations}
             for a in addrs
         ]
+
+
+@dataclasses.dataclass
+class _Mount(Mount):
+    """Custom Mount subclass. Defaults to relabel shared. Takes an additional
+    source dir mode."""
+
+    relabel: RelabelOpt = RelabelOpt.SHARED
+    dir_mode: Optional[int] = None
+
+    def path(self) -> Union[str, pathlib.Path]:
+        assert isinstance(self.source, (str, pathlib.Path))
+        return self.source
+
+
+def _samba_mounts(
+    cfg: Config, data_dir: pathlib.Path, mode: int = 0o770
+) -> List[Mount]:
+    vols: List[Mount] = [
+        _Mount(
+            data_dir / 'etc-samba-container',
+            '/etc/samba/container',
+            dir_mode=mode,
+        ),
+        _Mount(data_dir / 'lib-samba', '/var/lib/samba', dir_mode=mode),
+        # TODO: make this a shared tmpfs
+        _Mount(data_dir / 'run', '/run', dir_mode=mode),
+        _Mount(data_dir / 'config', '/etc/ceph/ceph.conf'),
+        _Mount(data_dir / 'keyring', '/etc/ceph/keyring'),
+    ]
+    if cfg.clustered:
+        ctdb_dir = data_dir / 'ctdb'
+        vols.extend(
+            [
+                _Mount(ctdb_dir / 'etc', '/etc/ctdb', dir_mode=mode),
+                _Mount(
+                    ctdb_dir / 'persistent',
+                    '/var/lib/ctdb/persistent',
+                    dir_mode=mode,
+                ),
+                _Mount(
+                    ctdb_dir / 'volatile',
+                    '/var/lib/ctdb/volatile',
+                    dir_mode=mode,
+                ),
+                # TODO: make this a shared tmpfs
+                _Mount(ctdb_dir / 'run', '/var/run/ctdb', dir_mode=mode),
+                # create a shared smb.conf file for our clustered instances.
+                # This is a HACK that substitutes for a bunch of architectural
+                # changes to sambacc *and* smbmetrics (container). In short,
+                # sambacc can set up the correct cluster enabled conf file for
+                # samba daemons (smbd, winbindd, etc) but not it's own long running
+                # tasks.  Similarly, the smbmetrics container always uses the
+                # registry conf (non-clustered). Having cephadm create a stub
+                # config that will share the file across all containers is a
+                # stopgap that resolves the problem for now, but should eventually
+                # be replaced by a less "leaky" approach in the managed containers.
+                _Mount(ctdb_dir / 'smb.conf', '/etc/samba/smb.conf'),
+            ]
+        )
+    return vols
