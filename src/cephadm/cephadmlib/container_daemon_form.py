@@ -182,5 +182,5 @@ def daemon_to_container(
         privileged=privileged,
         ptrace=ptrace,
         host_network=host_network,
-        **mounts.as_legacy_kwargs(),
+        **mounts.as_kwargs(),
     )
