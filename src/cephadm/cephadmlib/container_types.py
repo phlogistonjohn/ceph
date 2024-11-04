@@ -705,3 +705,34 @@ def _collect_mount_arguments(
         [],
     )
     return mounts + vols + binds
+
+
+class AvailableContainerMounts:
+    """Abstract representation of mounts that may be associated with a
+    container, without the rest of the container params.
+    """
+
+    def __init__(
+        self,
+        mounts: Optional[Collection[Mountable]] = None,
+        # legacy forms (still heavily used)
+        volume_mounts: Optional[Dict[str, str]] = None,
+        bind_mounts: Optional[List[List[str]]] = None,
+    ) -> None:
+        self.mounts = mounts or []
+        self.volume_mounts = volume_mounts or {}
+        self.bind_mounts = bind_mounts or []
+
+    def as_kwargs(self) -> Dict[str, Any]:
+        return {
+            'mounts': self.mounts,
+            'volume_mounts': self.volume_mounts,
+            'bind_mounts': self.bind_mounts,
+        }
+
+    def as_legacy_kwargs(self) -> Dict[str, Any]:
+        assert not self.mounts, 'New style mount objects not supported yet'
+        return {
+            'volume_mounts': self.volume_mounts,
+            'bind_mounts': self.bind_mounts,
+        }
