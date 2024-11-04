@@ -5,7 +5,17 @@ import enum
 import functools
 import os
 
-from typing import Dict, List, Optional, Any, Union, Tuple, Iterable, cast
+from typing import (
+    Dict,
+    List,
+    Optional,
+    Any,
+    Union,
+    Tuple,
+    Iterable,
+    cast,
+    Collection,
+)
 
 from .call_wrappers import call, call_throws, CallVerbosity
 from .constants import DEFAULT_TIMEOUT
@@ -15,6 +25,7 @@ from .context import CephadmContext
 from .daemon_identity import DaemonIdentity, DaemonSubIdentity
 from .exceptions import Error
 from .net_utils import get_hostname
+from .volume_types import Mountable, mount_arguments
 
 
 class BasicContainer:
@@ -30,6 +41,7 @@ class BasicContainer:
         envs: Optional[List[str]] = None,
         volume_mounts: Optional[Dict[str, str]] = None,
         bind_mounts: Optional[List[List[str]]] = None,
+        mounts: Optional[Collection[Mountable]] = None,
         network: str = '',
         ipc: str = '',
         init: bool = False,
@@ -48,6 +60,7 @@ class BasicContainer:
         self.envs = envs or []
         self.volume_mounts = volume_mounts or {}
         self.bind_mounts = bind_mounts or []
+        self.mounts = mounts or []
         self.network = network
         self.ipc = ipc
         self.init = init
@@ -132,25 +145,12 @@ class BasicContainer:
             for env in self.envs:
                 envs.extend(['-e', env])
 
-        vols: List[str] = []
-        vols = sum(
-            [
-                ['-v', '%s:%s' % (host_dir, container_dir)]
-                for host_dir, container_dir in self.volume_mounts.items()
-            ],
-            [],
+        mounts = _collect_mount_arguments(
+            self.mounts,
+            self.volume_mounts,
+            self.bind_mounts,
         )
-
-        binds: List[str] = []
-        binds = sum(
-            [
-                ['--mount', '{}'.format(','.join(bind))]
-                for bind in self.bind_mounts
-            ],
-            [],
-        )
-
-        return cmd_args + self.container_args + envs + vols + binds
+        return cmd_args + self.container_args + envs + mounts
 
     def build_run_cmd(self) -> List[str]:
         return (
@@ -225,6 +225,7 @@ class CephContainer(BasicContainer):
         privileged: bool = False,
         ptrace: bool = False,
         bind_mounts: Optional[List[List[str]]] = None,
+        mounts: Optional[Collection[Mountable]] = None,
         init: Optional[bool] = None,
         host_network: bool = True,
         memory_request: Optional[str] = None,
@@ -242,6 +243,7 @@ class CephContainer(BasicContainer):
         self.privileged = privileged
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
+        self.mounts = mounts or []
         self.init = init if init else ctx.container_init
         self.host_network = host_network
         self.memory_request = memory_request
@@ -676,3 +678,30 @@ def get_mgr_images() -> dict:
             ].lower()
             mgr_images[mgr_prefix + suffix] = value
     return mgr_images
+
+
+def _collect_mount_arguments(
+    mounts: Iterable[Mountable],
+    legacy_volume_mounts: Dict[str, str],
+    legacy_bind_mounts: List[List[str]],
+) -> List[str]:
+    mounts: List[str] = mount_arguments(mounts)
+
+    vols: List[str] = []
+    vols = sum(
+        [
+            ['-v', '%s:%s' % (host_dir, container_dir)]
+            for host_dir, container_dir in legacy_volume_mounts.items()
+        ],
+        [],
+    )
+
+    binds: List[str] = []
+    binds = sum(
+        [
+            ['--mount', '{}'.format(','.join(bind))]
+            for bind in legacy_bind_mounts
+        ],
+        [],
+    )
+    return mounts + vols + binds
