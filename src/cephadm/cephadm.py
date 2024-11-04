@@ -138,6 +138,7 @@ from cephadmlib.systemd import check_unit, check_units, terminate_service
 from cephadmlib import systemd_unit
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
+    AvailableContainerMounts,
     CephContainer,
     InitContainer,
     SidecarContainer,
@@ -924,16 +925,6 @@ def _write_custom_conf_files(
                     f.write(ccf['content'])
 
 
-def get_container_binds(
-    ctx: CephadmContext, ident: 'DaemonIdentity'
-) -> List[List[str]]:
-    binds: List[List[str]] = list()
-    daemon = daemon_form_create(ctx, ident)
-    assert isinstance(daemon, ContainerDaemonForm)
-    daemon.customize_container_binds(ctx, binds)
-    return binds
-
-
 def get_container_mounts_for_type(
     ctx: CephadmContext, fsid: str, daemon_type: str
 ) -> Dict[str, str]:
@@ -945,29 +936,25 @@ def get_container_mounts_for_type(
     return mounts
 
 
-def get_container_mounts(
+def get_available_mounts(
     ctx: CephadmContext, ident: 'DaemonIdentity', no_config: bool = False
-) -> Dict[str, str]:
-    """Return a dictionary mapping container-external paths to container-internal
-    paths given a daemon identity.
+) -> AvailableContainerMounts:
+    """Return an object representing the various mounts (new and legacy)
+    for a given container given a daemon identity.
     Setting `no_config` will skip mapping a daemon specific ceph.conf file.
     """
-    # unpack daemon_type from ident because they're used very frequently
-    daemon_type = ident.daemon_type
-    mounts: Dict[str, str] = {}
-
     assert ident.fsid
     assert ident.daemon_id
+    mounts = AvailableContainerMounts()
+    daemon = daemon_form_create(ctx, ident)
+    assert isinstance(daemon, ContainerDaemonForm)
+    daemon.customize_container_mounts(ctx, mounts)
     # Ceph daemon types are special cased here beacause of the no_config
     # option which JJM thinks is *only* used by cephadm shell
-    if daemon_type in ceph_daemons():
-        mounts = Ceph.get_ceph_mounts(ctx, ident, no_config=no_config)
-    else:
-        daemon = daemon_form_create(ctx, ident)
-        assert isinstance(daemon, ContainerDaemonForm)
-        daemon.customize_container_mounts(ctx, mounts)
+    if ident.daemon_type in ceph_daemons():
+        mounts.volume_mounts = Ceph.get_ceph_mounts(ctx, ident, no_config=no_config)
 
-    _update_podman_mounts(ctx, mounts)
+    _update_podman_mounts(ctx, mounts.volume_mounts)
     return mounts
 
 
@@ -1275,9 +1262,8 @@ def _osd_unit_run_commands(
         test_cv = get_ceph_volume_container(
             ctx,
             args=['activate', '--bad-option'],
-            volume_mounts=get_container_mounts(ctx, ident),
-            bind_mounts=get_container_binds(ctx, ident),
             cname='ceph-%s-%s.%s-activate-test' % (fsid, daemon_type, daemon_id),
+            **get_available_mounts(ctx, ident).as_legacy_kwargs()
         )
         out, err, ret = call(ctx, test_cv.run_cmd(), verbosity=CallVerbosity.SILENT)
         #  bad: ceph-volume: error: unrecognized arguments: activate --bad-option
@@ -1301,9 +1287,8 @@ def _osd_unit_run_commands(
         prestart = get_ceph_volume_container(
             ctx,
             args=cmd,
-            volume_mounts=get_container_mounts(ctx, ident),
-            bind_mounts=get_container_binds(ctx, ident),
             cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
+            **get_available_mounts(ctx, ident).as_legacy_kwargs()
         )
         cmds.append(runscripts.ContainerCommand(prestart, comment='LVM OSDs use ceph-volume lvm activate'))
     return cmds
@@ -1318,9 +1303,8 @@ def _osd_unit_poststop_commands(
             'lvm', 'deactivate',
             ident.daemon_id, osd_fsid,
         ],
-        volume_mounts=get_container_mounts(ctx, ident),
-        bind_mounts=get_container_binds(ctx, ident),
         cname='ceph-%s-%s.%s-deactivate' % (ident.fsid, ident.daemon_type, ident.daemon_id),
+        **get_available_mounts(ctx, ident).as_legacy_kwargs()
     )
     return [runscripts.ContainerCommand(poststop, comment='deactivate osd')]
 
@@ -3217,10 +3201,9 @@ def command_shell(ctx):
     container_args: List[str] = ['-i']
     if ctx.fsid and daemon_id:
         ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
-        mounts = get_container_mounts(
-            ctx, ident, no_config=bool(ctx.config),
-        )
-        binds = get_container_binds(ctx, ident)
+        _mounts = get_available_mounts(ctx, ident, no_config=bool(ctx.config))
+        mounts = _mounts.volume_mounts
+        binds = _mounts.bind_mounts
     else:
         mounts = get_container_mounts_for_type(ctx, ctx.fsid, daemon_type)
         binds = []

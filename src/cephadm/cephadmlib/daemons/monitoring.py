@@ -16,7 +16,11 @@ from ..constants import (
     GID_NOGROUP,
 )
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, extract_uid_gid
+from ..container_types import (
+    AvailableContainerMounts,
+    CephContainer,
+    extract_uid_gid,
+)
 from ..context import CephadmContext
 from ..context_getters import fetch_configs, fetch_meta
 from ..daemon_form import register as register_daemon_form
@@ -366,10 +370,12 @@ class Monitoring(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
-        mounts.update(self._get_container_mounts(data_dir))
+        mounts.volume_mounts.update(self._get_container_mounts(data_dir))
 
     def customize_container_args(
         self, ctx: CephadmContext, args: List[str]

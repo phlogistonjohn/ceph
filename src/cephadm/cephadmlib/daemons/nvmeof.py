@@ -4,7 +4,7 @@ import os
 from typing import Dict, List, Optional, Tuple, Union
 
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer
+from ..container_types import AvailableContainerMounts, CephContainer
 from ..context_getters import fetch_configs, get_config_and_keyring
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
@@ -98,31 +98,34 @@ class CephNvmeof(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         log_dir = os.path.join(ctx.log_dir, self.identity.fsid)
         mtls_dir = os.path.join(ctx.data_dir, self.identity.fsid, 'mtls')
         if os.path.exists(mtls_dir):
-            mounts.update(
+            mounts.volume_mounts.update(
                 self._get_container_mounts(
                     data_dir, log_dir, mtls_dir=mtls_dir
                 )
             )
         else:
-            mounts.update(self._get_container_mounts(data_dir, log_dir))
-        mounts.update(self._get_tls_cert_key_mounts(data_dir, self.files))
+            mounts.volume_mounts.update(
+                self._get_container_mounts(data_dir, log_dir)
+            )
+        mounts.volume_mounts.update(
+            self._get_tls_cert_key_mounts(data_dir, self.files)
+        )
 
-    def customize_container_binds(
-        self, ctx: CephadmContext, binds: List[List[str]]
-    ) -> None:
         lib_modules = [
             'type=bind',
             'source=/lib/modules',
             'destination=/lib/modules',
             'ro=true',
         ]
-        binds.append(lib_modules)
+        mounts.bind_mounts.append(lib_modules)
 
     @staticmethod
     def get_version(ctx: CephadmContext, container_id: str) -> Optional[str]:

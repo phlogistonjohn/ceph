@@ -5,7 +5,11 @@ import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, InitContainer
+from ..container_types import (
+    AvailableContainerMounts,
+    CephContainer,
+    InitContainer,
+)
 from ..context import CephadmContext
 from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
@@ -129,10 +133,13 @@ class CustomContainer(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
-        mounts.update(self._get_container_mounts(data_dir))
+        mounts.volume_mounts.update(self._get_container_mounts(data_dir))
+        mounts.bind_mounts.extend(self._get_container_binds(data_dir))
 
     def _get_container_binds(self, data_dir: str) -> List[List[str]]:
         """
@@ -162,12 +169,6 @@ class CustomContainer(ContainerDaemonForm):
                         os.path.join(data_dir, match.group(1))
                     )
         return binds
-
-    def customize_container_binds(
-        self, ctx: CephadmContext, binds: List[List[str]]
-    ) -> None:
-        data_dir = self.identity.data_dir(ctx.data_dir)
-        binds.extend(self._get_container_binds(data_dir))
 
     # Cache the container so we don't need to rebuild it again when calling
     # into init_containers

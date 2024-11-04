@@ -6,7 +6,11 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from ..call_wrappers import call, CallVerbosity
 from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF
-from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
+from ..container_daemon_form import (
+    AvailableContainerMounts,
+    ContainerDaemonForm,
+    daemon_to_container,
+)
 from ..container_types import CephContainer, extract_uid_gid
 from ..context import CephadmContext
 from ..context_getters import fetch_configs, get_config_and_keyring
@@ -91,10 +95,12 @@ class NFSGanesha(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
-        mounts.update(self._get_container_mounts(data_dir))
+        mounts.volume_mounts.update(self._get_container_mounts(data_dir))
 
     @staticmethod
     def get_container_envs():

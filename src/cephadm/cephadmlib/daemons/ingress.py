@@ -10,7 +10,11 @@ from ..constants import (
     DATA_DIR_MODE,
 )
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, extract_uid_gid
+from ..container_types import (
+    AvailableContainerMounts,
+    CephContainer,
+    extract_uid_gid,
+)
 from ..context import CephadmContext
 from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
@@ -122,10 +126,12 @@ class HAproxy(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
-        mounts.update(self._get_container_mounts(data_dir))
+        mounts.volume_mounts.update(self._get_container_mounts(data_dir))
 
     @staticmethod
     def get_sysctl_settings() -> List[str]:
@@ -272,10 +278,12 @@ class Keepalived(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
-        mounts.update(self._get_container_mounts(data_dir))
+        mounts.volume_mounts.update(self._get_container_mounts(data_dir))
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self)

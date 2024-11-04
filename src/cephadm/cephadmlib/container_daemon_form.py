@@ -5,7 +5,12 @@ import abc
 from typing import List, Tuple, Optional, Dict
 
 from .container_engines import Podman
-from .container_types import CephContainer, InitContainer, SidecarContainer
+from .container_types import (
+    AvailableContainerMounts,
+    CephContainer,
+    InitContainer,
+    SidecarContainer,
+)
 from .context import CephadmContext
 from .daemon_form import DaemonForm
 from .deploy import DeploymentType
@@ -48,19 +53,11 @@ class ContainerDaemonForm(DaemonForm):
         """
         return []
 
-    def customize_container_binds(
-        self, ctx: CephadmContext, binds: List[List[str]]
-    ) -> None:
-        """Given a list of container binds this function can update, delete,
-        or otherwise mutate the binds that the container will use.
-        """
-        pass
-
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self, ctx: CephadmContext, mounts: AvailableContainerMounts
     ) -> None:
-        """Given a list of container mounts this function can update, delete,
-        or otherwise mutate the mounts that the container will use.
+        """Given the available container mounts this function can update,
+        delete, or otherwise mutate the mounts that the container will use.
         """
         pass
 
@@ -150,23 +147,24 @@ def daemon_to_container(
     The auto_podman_mounts argument enables adding mounts expected on all
     daemons running on podman (true by default).
     """
+    mounts = AvailableContainerMounts(
+        volume_mounts=container_mounts,
+        bind_mounts=container_binds,
+    )
     container_args = container_args if container_args else []
-    container_mounts = container_mounts if container_mounts else {}
-    container_binds = container_binds if container_binds else []
     envs = envs if envs else []
     args = args if args else []
 
     if entrypoint is None:
         entrypoint = daemon.default_entrypoint()
     daemon.customize_container_args(ctx, container_args)
-    daemon.customize_container_mounts(ctx, container_mounts)
-    daemon.customize_container_binds(ctx, container_binds)
+    daemon.customize_container_mounts(ctx, mounts)
     daemon.customize_container_envs(ctx, envs)
     daemon.customize_process_args(ctx, args)
 
     _is_podman = isinstance(ctx.container_engine, Podman)
     if auto_podman_mounts and _is_podman:
-        ctx.container_engine.update_mounts(ctx, container_mounts)
+        ctx.container_engine.update_mounts(ctx, mounts.volume_mounts)
     if auto_podman_args and _is_podman:
         container_args.extend(
             ctx.container_engine.service_args(
@@ -180,10 +178,9 @@ def daemon_to_container(
         entrypoint=entrypoint,
         args=args,
         container_args=container_args,
-        volume_mounts=container_mounts,
-        bind_mounts=container_binds,
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
         host_network=host_network,
+        **mounts.as_legacy_kwargs(),
     )

@@ -5,7 +5,12 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, SidecarContainer, extract_uid_gid
+from ..container_types import (
+    AvailableContainerMounts,
+    CephContainer,
+    SidecarContainer,
+    extract_uid_gid,
+)
 from ..context_getters import fetch_configs, get_config_and_keyring
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
@@ -95,7 +100,9 @@ class CephIscsi(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         # Removes ending ".tcmu" from data_dir a tcmu-runner uses the same
@@ -103,18 +110,17 @@ class CephIscsi(ContainerDaemonForm):
         if data_dir.endswith('.tcmu'):
             data_dir = re.sub(r'\.tcmu$', '', data_dir)
         log_dir = os.path.join(ctx.log_dir, self.identity.fsid)
-        mounts.update(CephIscsi._get_container_mounts(data_dir, log_dir))
+        mounts.volume_mounts.update(
+            CephIscsi._get_container_mounts(data_dir, log_dir)
+        )
 
-    def customize_container_binds(
-        self, ctx: CephadmContext, binds: List[List[str]]
-    ) -> None:
         lib_modules = [
             'type=bind',
             'source=/lib/modules',
             'destination=/lib/modules',
             'ro=true',
         ]
-        binds.append(lib_modules)
+        mounts.bind_mounts.append(lib_modules)
 
     @staticmethod
     def get_version(ctx, container_id):

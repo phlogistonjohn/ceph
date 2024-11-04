@@ -5,7 +5,7 @@ import re
 
 from ..call_wrappers import call, CallVerbosity
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer
+from ..container_types import AvailableContainerMounts, CephContainer
 from ..context import CephadmContext
 from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
@@ -133,10 +133,12 @@ class OAuth2Proxy(ContainerDaemonForm):
         return version
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
-        mounts.update(
+        mounts.volume_mounts.update(
             {
                 os.path.join(
                     data_dir, 'etc/oauth2-proxy.conf'

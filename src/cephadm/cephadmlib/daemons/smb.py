@@ -18,6 +18,7 @@ from ceph.cephadm.images import DEFAULT_SAMBA_IMAGE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_engines import Podman
 from ..container_types import (
+    AvailableContainerMounts,
     CephContainer,
     InitContainer,
     Namespace,
@@ -542,12 +543,12 @@ class SMB(ContainerDaemonForm):
     def _to_init_container(
         self, ctx: CephadmContext, smb_ctr: SambaContainerCommon
     ) -> InitContainer:
-        volume_mounts: Dict[str, str] = {}
+        mounts = AvailableContainerMounts()
         container_args: List[str] = smb_ctr.container_args()
-        self.customize_container_mounts(ctx, volume_mounts)
+        self.customize_container_mounts(ctx, mounts)
         # XXX: is this needed? if so, can this be simplified
         if isinstance(ctx.container_engine, Podman):
-            ctx.container_engine.update_mounts(ctx, volume_mounts)
+            ctx.container_engine.update_mounts(ctx, mounts.volume_mounts)
         identity = DaemonSubIdentity.from_parent(
             self.identity, smb_ctr.name()
         )
@@ -559,15 +560,15 @@ class SMB(ContainerDaemonForm):
             args=smb_ctr.args(),
             container_args=container_args,
             envs=smb_ctr.envs_list(),
-            volume_mounts=volume_mounts,
+            **mounts.as_kwargs(),
         )
 
     def _to_sidecar_container(
         self, ctx: CephadmContext, smb_ctr: ContainerCommon
     ) -> SidecarContainer:
-        volume_mounts: Dict[str, str] = {}
+        mounts = AvailableContainerMounts()
         container_args: List[str] = smb_ctr.container_args()
-        self.customize_container_mounts(ctx, volume_mounts)
+        self.customize_container_mounts(ctx, mounts)
         shared_ns = {
             Namespace.ipc,
             Namespace.network,
@@ -575,7 +576,7 @@ class SMB(ContainerDaemonForm):
         }
         if isinstance(ctx.container_engine, Podman):
             # XXX: is this needed? if so, can this be simplified
-            ctx.container_engine.update_mounts(ctx, volume_mounts)
+            ctx.container_engine.update_mounts(ctx, mounts.volume_mounts)
             # docker doesn't support sharing the uts namespace with other
             # containers. It may not be entirely needed on podman but it gives
             # me warm fuzzies to make sure it gets shared.
@@ -595,9 +596,9 @@ class SMB(ContainerDaemonForm):
             container_args=container_args,
             args=smb_ctr.args(),
             envs=smb_ctr.envs_list(),
-            volume_mounts=volume_mounts,
             init=False,
             remove=True,
+            **mounts.as_kwargs(),
         )
 
     def container(self, ctx: CephadmContext) -> CephContainer:
@@ -644,29 +645,30 @@ class SMB(ContainerDaemonForm):
     def customize_container_mounts(
         self,
         ctx: CephadmContext,
-        mounts: Dict[str, str],
+        mounts: AvailableContainerMounts,
     ) -> None:
         self.validate()
+        ms = mounts.volume_mounts
         data_dir = pathlib.Path(self.identity.data_dir(ctx.data_dir))
         etc_samba_ctr = str(data_dir / 'etc-samba-container')
         lib_samba = str(data_dir / 'lib-samba')
         run_samba = str(data_dir / 'run')
         config = str(data_dir / 'config')
         keyring = str(data_dir / 'keyring')
-        mounts[etc_samba_ctr] = '/etc/samba/container:z'
-        mounts[lib_samba] = '/var/lib/samba:z'
-        mounts[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
-        mounts[config] = '/etc/ceph/ceph.conf:z'
-        mounts[keyring] = '/etc/ceph/keyring:z'
+        ms[etc_samba_ctr] = '/etc/samba/container:z'
+        ms[lib_samba] = '/var/lib/samba:z'
+        ms[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
+        ms[config] = '/etc/ceph/ceph.conf:z'
+        ms[keyring] = '/etc/ceph/keyring:z'
         if self._cfg.clustered:
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
             ctdb_volatile = str(data_dir / 'ctdb/volatile')
             ctdb_etc = str(data_dir / 'ctdb/etc')
-            mounts[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
-            mounts[ctdb_run] = '/var/run/ctdb:z'
-            mounts[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
-            mounts[ctdb_etc] = '/etc/ctdb:z'
+            ms[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
+            ms[ctdb_run] = '/var/run/ctdb:z'
+            ms[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
+            ms[ctdb_etc] = '/etc/ctdb:z'
             # create a shared smb.conf file for our clustered instances.
             # This is a HACK that substitutes for a bunch of architectural
             # changes to sambacc *and* smbmetrics (container). In short,
@@ -678,7 +680,7 @@ class SMB(ContainerDaemonForm):
             # stopgap that resolves the problem for now, but should eventually
             # be replaced by a less "leaky" approach in the managed containers.
             ctdb_smb_conf = str(data_dir / 'ctdb/smb.conf')
-            mounts[ctdb_smb_conf] = '/etc/samba/smb.conf:z'
+            ms[ctdb_smb_conf] = '/etc/samba/smb.conf:z'
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType

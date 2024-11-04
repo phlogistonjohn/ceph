@@ -4,7 +4,11 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, extract_uid_gid
+from ..container_types import (
+    AvailableContainerMounts,
+    CephContainer,
+    extract_uid_gid,
+)
 from ..context_getters import (
     fetch_configs,
     get_config_and_keyring,
@@ -176,7 +180,9 @@ class Ceph(ContainerDaemonForm):
         return mounts
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self,
+        ctx: CephadmContext,
+        mounts: AvailableContainerMounts,
     ) -> None:
         no_config = bool(
             getattr(ctx, 'config', None) and self.user_supplied_config
@@ -186,7 +192,7 @@ class Ceph(ContainerDaemonForm):
             self.identity,
             no_config=no_config,
         )
-        mounts.update(cm)
+        mounts.volume_mounts.update(cm)
 
     def customize_container_args(
         self, ctx: CephadmContext, args: List[str]
@@ -362,13 +368,15 @@ class CephExporter(ContainerDaemonForm):
         return get_config_and_keyring(ctx)
 
     def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
+        self, ctx: CephadmContext, mounts: AvailableContainerMounts
     ) -> None:
         cm = Ceph.get_ceph_mounts(ctx, self.identity)
-        mounts.update(cm)
+        mounts.volume_mounts.update(cm)
         if self.https_enabled:
             data_dir = self.identity.data_dir(ctx.data_dir)
-            mounts.update({os.path.join(data_dir, 'etc/certs'): '/etc/certs'})
+            mounts.volume_mounts.update(
+                {os.path.join(data_dir, 'etc/certs'): '/etc/certs'}
+            )
 
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
