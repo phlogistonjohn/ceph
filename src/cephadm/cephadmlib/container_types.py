@@ -359,8 +359,6 @@ class CephContainer(BasicContainer):
             '-e',
             'NODE_NAME=%s' % get_hostname(),
         ]
-        vols: List[str] = []
-        binds: List[str] = []
 
         if self.host_network:
             cmd_args.append('--net=host')
@@ -380,27 +378,17 @@ class CephContainer(BasicContainer):
             for env in self.envs:
                 envs.extend(['-e', env])
 
-        vols = sum(
-            [
-                ['-v', '%s:%s' % (host_dir, container_dir)]
-                for host_dir, container_dir in self.volume_mounts.items()
-            ],
-            [],
-        )
-        binds = sum(
-            [
-                ['--mount', '{}'.format(','.join(bind))]
-                for bind in self.bind_mounts
-            ],
-            [],
+        mounts = _collect_mount_arguments(
+            self.mounts,
+            self.volume_mounts,
+            self.bind_mounts,
         )
 
         return (
             cmd_args
             + self.container_args
             + envs
-            + vols
-            + binds
+            + mounts
             + [
                 '--entrypoint',
                 cmd[0],
