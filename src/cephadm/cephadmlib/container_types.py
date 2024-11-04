@@ -705,7 +705,7 @@ class AvailableContainerMounts:
 
     def __init__(
         self,
-        mounts: Optional[Collection[Mountable]] = None,
+        mounts: Optional[List[Mountable]] = None,
         # legacy forms (still heavily used)
         volume_mounts: Optional[Dict[str, str]] = None,
         bind_mounts: Optional[List[List[str]]] = None,
