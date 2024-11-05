@@ -15,6 +15,7 @@ from .context import CephadmContext
 from .daemon_form import DaemonForm
 from .deploy import DeploymentType
 from .net_utils import EndPoint
+from .volume_types import VolumeSettings
 
 
 class ContainerDaemonForm(DaemonForm):
@@ -50,6 +51,13 @@ class ContainerDaemonForm(DaemonForm):
     ) -> List[SidecarContainer]:
         """Returns a list of sidecar containers that should be executed along
         with the primary service container.
+        """
+        return []
+
+    def managed_volumes(self, ctx: CephadmContext) -> List[VolumeSettings]:
+        """Return a list of volume settings objects that should be prepared
+        for use by the container(s) prior to init containers or primary, or
+        sidecar containers starting.
         """
         return []
 
