@@ -31,7 +31,12 @@ from ..deploy import DeploymentType
 from ..exceptions import Error
 from ..host_facts import list_networks
 from ..net_utils import EndPoint
-from ..volume_types import Mount, RelabelOpt, VolumeSettings
+from ..volume_types import (
+    Mount,
+    RelabelOpt,
+    VolumeSettings,
+    VolumeSubIdentity,
+)
 
 
 logger = logging.getLogger()
@@ -778,22 +783,26 @@ class _Mount(Mount):
 def _samba_mounts(
     cfg: Config, data_dir: pathlib.Path, mode: int = 0o770
 ) -> List[Mount]:
+    runvol = VolumeSettings.tmpfs(VolumeSubIdentity(cfg.identity, 'run'))
     vols: List[Mount] = [
+        _Mount(runvol, '/run'),
         _Mount(
             data_dir / 'etc-samba-container',
             '/etc/samba/container',
             dir_mode=mode,
         ),
         _Mount(data_dir / 'lib-samba', '/var/lib/samba', dir_mode=mode),
-        # TODO: make this a shared tmpfs
-        _Mount(data_dir / 'run', '/run', dir_mode=mode),
         _Mount(data_dir / 'config', '/etc/ceph/ceph.conf'),
         _Mount(data_dir / 'keyring', '/etc/ceph/keyring'),
     ]
     if cfg.clustered:
         ctdb_dir = data_dir / 'ctdb'
+        ctdb_runvol = VolumeSettings.tmpfs(
+            VolumeSubIdentity(cfg.identity, 'ctdbrun')
+        )
         vols.extend(
             [
+                _Mount(ctdb_runvol, '/var/run/ctdb'),
                 _Mount(ctdb_dir / 'etc', '/etc/ctdb', dir_mode=mode),
                 _Mount(
                     ctdb_dir / 'persistent',
@@ -805,8 +814,6 @@ def _samba_mounts(
                     '/var/lib/ctdb/volatile',
                     dir_mode=mode,
                 ),
-                # TODO: make this a shared tmpfs
-                _Mount(ctdb_dir / 'run', '/var/run/ctdb', dir_mode=mode),
                 # create a shared smb.conf file for our clustered instances.
                 # This is a HACK that substitutes for a bunch of architectural
                 # changes to sambacc *and* smbmetrics (container). In short,
