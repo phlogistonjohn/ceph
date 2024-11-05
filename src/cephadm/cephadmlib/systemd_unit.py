@@ -41,10 +41,10 @@ class PathInfo:
         self.sidecar_unit_files = {
             si: unit_dir / si.sidecar_service_name for si in self.sidecar_ids
         }
-        self.volume_unit_files = {
-            vs: unit_dir / vs.identity.volume_service_name
+        self.volume_unit_files = [
+            (vs, unit_dir / vs.identity.volume_service_name)
             for vs in self.volumes
-        }
+        ]
         dname = f'{identity.service_name}.d'
         self.drop_in_file = unit_dir / dname / _DROP_IN_FILENAME
 
@@ -159,7 +159,7 @@ def _install_extended_systemd_services(
 
         # install unit files that manage volumes
         vids = []
-        for vs, vpath in pinfo.volume_unit_files.items():
+        for vs, vpath in pinfo.volume_unit_files:
             vfh = estack.enter_context(write_new(vpath, perms=None))
             _write_volume_unit_file(
                 vfh,
