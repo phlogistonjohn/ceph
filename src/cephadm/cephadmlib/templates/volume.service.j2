@@ -16,9 +16,9 @@ Before={{ primary.init_service_name }}
 
 [Service]
 EnvironmentFile=-/etc/environment
-ExecStartPre=-{{ ctx.engine.path }}{{ volume.rm_command | map('shellquote') | join(' ') }}
-ExecStart={{ ctx.engine.path }}{{ volume.create_command | map('shellquote') | join(' ') }}
-ExecStop={{ ctx.engine.path }}{{ volume.rm_command | map('shellquote') | join(' ') }}
+ExecStartPre=-{{ volume.rm_command(ctx.container_engine.path) | map('shellquote') | join(' ') }}
+ExecStart={{ volume.create_command(ctx.container_engine.path) | map('shellquote') | join(' ') }}
+ExecStop={{ volume.rm_command(ctx.container_engine.path) | map('shellquote') | join(' ') }}
 TimeoutStopSec=120
 StartLimitInterval=30min
 StartLimitBurst=5
