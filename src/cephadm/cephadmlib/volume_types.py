@@ -6,6 +6,8 @@ import dataclasses
 import enum
 import os
 
+from .daemon_identity import DaemonIdentity
+
 
 class NamedVolume(Protocol):
     """Protocol object for any named volume."""
@@ -53,11 +55,43 @@ class RelabelOpt(str, enum.Enum):
 
 
 @dataclasses.dataclass
+class VolumeSubIdentity:
+    parent: DaemonIdentity
+    short_name: str
+
+    @property
+    def name(self) -> str:
+        return f'ceph-{self.parent.fsid}-{self.parent.daemon_type}-{self.parent.daemon_id}-{self.short_name}'
+
+    @property
+    def fsid(self) -> str:
+        return self.parent.fsid
+
+    @property
+    def daemon_type(self) -> str:
+        return self.parent.daemon_type
+
+    @property
+    def daemon_id(self) -> str:
+        return self.parent.daemon_id
+
+    @property
+    def volume_service_name(self) -> str:
+        # TODO: make _systemd_name a non-private module level function
+        return self.parent._systemd_name(
+            category='volume', suffix=self.short_name, extension='service'
+        )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@dataclasses.dataclass
 class VolumeSettings:
     """A volume object managed by podman/docker."""
 
-    # name of the volume
-    name: str
+    # identity of the volume
+    identity: VolumeSubIdentity
     # driver for the volume (empty string for default)
     driver: str = ''
     # volume_type specifies the fs/volume type (empty string for default)
@@ -66,6 +100,33 @@ class VolumeSettings:
     device: str = ''
     # mount_options additional mount options for this volume
     mount_options: Optional[List[str]] = None
+
+    @classmethod
+    def tmpfs(cls, identity: VolumeSubIdentity) -> 'VolumeSettings':
+        return cls(identity, volume_type='tmpfs', device='tmpfs')
+
+    @property
+    def name(self) -> str:
+        return self.identity.name
+
+    def create_command(self, engine: str = '') -> List[str]:
+        cmd = [engine] if engine else []
+        cmd += ['volume', 'create']
+        if self.driver:
+            cmd.append(f'--driver={self.driver}')
+        if self.volume_type:
+            cmd.append(f'--opt=type={self.volume_type}')
+        if self.device:
+            cmd.append(f'--opt=device={self.device}')
+        for opt in self.mount_options or []:
+            cmd.append(f'--opt={opt}')
+        cmd.append(self.name)
+        return cmd
+
+    def rm_command(self, engine: str = '') -> List[str]:
+        cmd = [engine] if engine else []
+        cmd += ['volume', 'rm', self.name]
+        return cmd
 
 
 @dataclasses.dataclass
