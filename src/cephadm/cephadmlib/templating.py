@@ -25,6 +25,7 @@ class Templates(str, enum.Enum):
     dropin_service = 'dropin.service.j2'
     init_ctr_service = 'init_ctr.service.j2'
     sidecar_service = 'sidecar.service.j2'
+    volume_service = 'volume.service.j2'
     cluster_logrotate_config = 'cluster.logrotate.config.j2'
     cephadm_logrotate_config = 'cephadm.logrotate.config.j2'
     sidecar_run = 'sidecar.run.j2'
