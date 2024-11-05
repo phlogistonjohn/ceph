@@ -13,6 +13,7 @@ from .context import CephadmContext
 from .daemon_identity import DaemonIdentity, DaemonSubIdentity
 from .file_utils import write_new
 from .logging import write_cluster_logrotate_config
+from .volume_types import VolumeSettings, VolumeSubIdentity
 
 
 _DROP_IN_FILENAME = '99-cephadm.conf'
@@ -28,15 +29,21 @@ class PathInfo:
         unit_dir: Union[str, pathlib.Path],
         identity: DaemonIdentity,
         sidecar_ids: Optional[List[DaemonSubIdentity]] = None,
+        volumes: Optional[List[VolumeSettings]] = None,
     ) -> None:
         self.identity = identity
         self.sidecar_ids = sidecar_ids or []
+        self.volumes = volumes or []
 
         unit_dir = pathlib.Path(unit_dir)
         self.default_unit_file = unit_dir / f'ceph-{identity.fsid}@.service'
         self.init_ctr_unit_file = unit_dir / identity.init_service_name
         self.sidecar_unit_files = {
             si: unit_dir / si.sidecar_service_name for si in self.sidecar_ids
+        }
+        self.volume_unit_files = {
+            vs: unit_dir / vs.identity.volume_service_name
+            for vs in self.volumes
         }
         dname = f'{identity.service_name}.d'
         self.drop_in_file = unit_dir / dname / _DROP_IN_FILENAME
@@ -48,6 +55,7 @@ def _write_drop_in(
     identity: DaemonIdentity,
     enable_init_containers: bool,
     sidecar_ids: List[DaemonSubIdentity],
+    volume_ids: List[VolumeSubIdentity],
 ) -> None:
     templating.render_to_file(
         dest,
@@ -56,6 +64,7 @@ def _write_drop_in(
         identity=identity,
         enable_init_containers=enable_init_containers,
         sidecar_ids=sidecar_ids,
+        volume_ids=volume_ids,
     )
 
 
@@ -100,6 +109,30 @@ def _write_sidecar_unit_file(
     )
 
 
+def _write_volume_unit_file(
+    dest: IO,
+    ctx: CephadmContext,
+    primary: DaemonIdentity,
+    volume: VolumeSettings,
+    enable_init_containers: bool,
+) -> None:
+    has_docker_engine = isinstance(ctx.container_engine, Docker)
+    has_podman_engine = isinstance(ctx.container_engine, Podman)
+    templating.render_to_file(
+        dest,
+        ctx,
+        templating.Templates.volume_service,
+        primary=primary,
+        volume=volume,
+        enable_init_containers=enable_init_containers,
+        has_docker_engine=has_docker_engine,
+        has_podman_engine=has_podman_engine,
+        has_podman_split_version=(
+            has_podman_engine and ctx.container_engine.supports_split_cgroups
+        ),
+    )
+
+
 def _install_extended_systemd_services(
     ctx: CephadmContext,
     pinfo: PathInfo,
@@ -124,14 +157,34 @@ def _install_extended_systemd_services(
             _write_sidecar_unit_file(sufh, ctx, identity, si)
             sids.append(si)
 
+        # install unit files that manage volumes
+        vids = []
+        for vs, vpath in pinfo.volume_unit_files.items():
+            vfh = estack.enter_context(write_new(vpath, perms=None))
+            _write_volume_unit_file(
+                vfh,
+                ctx,
+                primary=identity,
+                volume=vs,
+                enable_init_containers=enable_init_containers,
+            )
+            vids.append(vs.identity)
+
         # create a drop-in to create a relationship between the primary
         # service and the init- and sidecar-based services.
-        if enable_init_containers or sids:
+        if enable_init_containers or sids or vids:
             pinfo.drop_in_file.parent.mkdir(parents=True, exist_ok=True)
             difh = estack.enter_context(
                 write_new(pinfo.drop_in_file, perms=None)
             )
-            _write_drop_in(difh, ctx, identity, enable_init_containers, sids)
+            _write_drop_in(
+                difh,
+                ctx,
+                identity,
+                enable_init_containers,
+                sidecar_ids=sids,
+                volume_ids=vids,
+            )
 
 
 def _get_unit_file(ctx: CephadmContext, fsid: str) -> str:
@@ -203,10 +256,13 @@ def update_files(
     *,
     init_container_ids: Optional[List[DaemonSubIdentity]] = None,
     sidecar_ids: Optional[List[DaemonSubIdentity]] = None,
+    volumes: Optional[List[VolumeSettings]] = None,
 ) -> None:
     _install_base_units(ctx, ident.fsid)
     unit = _get_unit_file(ctx, ident.fsid)
-    pathinfo = PathInfo(ctx.unit_dir, ident, sidecar_ids=sidecar_ids)
+    pathinfo = PathInfo(
+        ctx.unit_dir, ident, sidecar_ids=sidecar_ids, volumes=volumes
+    )
     with write_new(pathinfo.default_unit_file, perms=None) as f:
         f.write(unit)
     _install_extended_systemd_services(
