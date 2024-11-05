@@ -186,6 +186,7 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
+from cephadmlib.volume_types import VolumeSettings
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -1027,6 +1028,7 @@ def deploy_daemon(
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List['InitContainer']] = None,
     sidecars: Optional[List[SidecarContainer]] = None,
+    managed_volumes: Optional[List[VolumeSettings]] = None,
 ) -> None:
     endpoints = endpoints or []
     daemon_type = ident.daemon_type
@@ -1107,6 +1109,7 @@ def deploy_daemon(
                     endpoints=endpoints,
                     init_containers=init_containers,
                     sidecars=sidecars,
+                    managed_volumes=managed_volumes,
                 )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
@@ -1173,6 +1176,7 @@ def deploy_daemon_units(
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List[InitContainer]] = None,
     sidecars: Optional[List[SidecarContainer]] = None,
+    managed_volumes: Optional[List[VolumeSettings]] = None,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1220,7 +1224,7 @@ def deploy_daemon_units(
         DaemonSubIdentity.must(sc.identity) for sc in sidecars or []
     ]
     systemd_unit.update_files(
-        ctx, ident, init_container_ids=ic_ids, sidecar_ids=sc_ids
+        ctx, ident, init_container_ids=ic_ids, sidecar_ids=sc_ids, volumes=managed_volumes
     )
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
@@ -3130,6 +3134,7 @@ def _deploy_daemon_container(
     ctr = daemon.container(ctx)
     ics = daemon.init_containers(ctx)
     sccs = daemon.sidecar_containers(ctx)
+    vols = daemon.managed_volumes(ctx)
     config, keyring = daemon.config_and_keyring(ctx)
     uid, gid = daemon.uid_gid(ctx)
     deploy_daemon(
@@ -3145,6 +3150,7 @@ def _deploy_daemon_container(
         osd_fsid=daemon.osd_fsid,
         init_containers=ics,
         sidecars=sccs,
+        managed_volumes=vols,
     )
 
 ##################################
