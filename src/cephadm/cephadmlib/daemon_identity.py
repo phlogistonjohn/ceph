@@ -13,6 +13,7 @@ from .context import CephadmContext
 class Categories(str, enum.Enum):
     SIDECAR = 'sidecar'
     INIT = 'init'
+    VOLUME = 'volume'
 
     def __str__(self) -> str:
         return self.value
