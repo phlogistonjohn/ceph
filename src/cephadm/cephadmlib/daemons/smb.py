@@ -31,7 +31,7 @@ from ..deploy import DeploymentType
 from ..exceptions import Error
 from ..host_facts import list_networks
 from ..net_utils import EndPoint
-from ..volume_types import Mount, RelabelOpt
+from ..volume_types import Mount, RelabelOpt, VolumeSettings
 
 
 logger = logging.getLogger()
@@ -624,6 +624,14 @@ class SMB(ContainerDaemonForm):
         return [
             self._to_sidecar_container(ctx, smb_ctr)
             for smb_ctr in self._layout().supplemental
+        ]
+
+    def managed_volumes(self, ctx: CephadmContext) -> List[VolumeSettings]:
+        data_dir = pathlib.Path(self.identity.data_dir(ctx.data_dir))
+        return [
+            m.source
+            for m in _samba_mounts(self._cfg, data_dir)
+            if isinstance(m.source, VolumeSettings)
         ]
 
     def customize_container_envs(
