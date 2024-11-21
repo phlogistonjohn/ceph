@@ -44,6 +44,7 @@ if [ -r /etc/os-release ]; then
           # (JJM) is this pinning of python versions really needed?
           if [ "$MAJOR_VER" -ge "24" ] ; then
               PYBUILD="3.12"
+              ARGS+=" -DWITH_JAEGER:BOOL=OFF"
           elif [ "$MAJOR_VER" -ge "22" ] ; then
               PYBUILD="3.10"
           fi
