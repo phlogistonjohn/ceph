@@ -4473,7 +4473,7 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 
     # stop + disable individual daemon units
     sd_paths = []
-    for d in list_daemons(ctx, detail=False):
+    for d in daemons_summary(ctx):
         if d['fsid'] != ctx.fsid:
             continue
         if d['style'] != 'cephadm:v1':
