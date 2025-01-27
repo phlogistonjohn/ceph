@@ -4797,7 +4797,7 @@ def update_service_for_daemon(ctx: CephadmContext,
 def command_update_osd_service(ctx: CephadmContext) -> int:
     """update service for provided daemon"""
     update_daemons = [f'osd.{osd_id}' for osd_id in ctx.osd_ids.split(',')]
-    daemons = list_daemons(ctx, detail=False, type_of_daemon='osd')
+    daemons = daemons_summary(ctx, type_of_daemon='osd')
     if not daemons:
         raise Error(f'Daemon {ctx.osd_ids} does not exists on this host')
     available_daemons = [d['name'] for d in daemons]
