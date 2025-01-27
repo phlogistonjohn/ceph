@@ -192,7 +192,11 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
-from cephadmlib.listing import daemons_matching, LegacyDaemonEntry
+from cephadmlib.listing import (
+    LegacyDaemonEntry,
+    daemons_matching,
+    daemons_summary,
+)
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -320,7 +324,7 @@ def infer_fsid(func: FuncT) -> FuncT:
         if cp.has_option('global', 'fsid'):
             fsids.add(cp.get('global', 'fsid'))
 
-        daemon_list = list_daemons(ctx, detail=False)
+        daemon_list = daemons_summary(ctx)
         for daemon in daemon_list:
             if not is_fsid(daemon['fsid']):
                 # 'unknown' fsid
@@ -364,7 +368,7 @@ def infer_config(func: FuncT) -> FuncT:
             return os.path.join(data_dir, 'config')
 
         def get_mon_daemon_name(fsid: str) -> Optional[str]:
-            daemon_list = list_daemons(ctx, detail=False)
+            daemon_list = daemons_summary(ctx)
             for daemon in daemon_list:
                 if (
                     daemon.get('name', '').startswith('mon.')
