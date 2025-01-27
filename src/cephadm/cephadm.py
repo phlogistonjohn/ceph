@@ -3459,7 +3459,7 @@ def list_daemons_new(
     return ls
 
 
-def list_daemons(
+def list_daemons_old(
     ctx: CephadmContext,
     detail: bool = True,
     legacy_dir: Optional[str] = None,
@@ -3553,6 +3553,9 @@ def list_daemons(
 
                 ls.append(val)
     return ls
+
+
+list_daemons = list_daemons_new
 
 
 def _update_legacy_status(
