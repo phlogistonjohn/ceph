@@ -192,6 +192,7 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
+from cephadmlib.listing import daemons_matching, LegacyDaemonEntry
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -3394,6 +3395,68 @@ def command_ls(ctx):
                       legacy_dir=ctx.legacy_dir,
                       daemon_name=ctx.name)
     print(json.dumps(ls, indent=4))
+
+
+def list_daemons_new(
+    ctx: CephadmContext,
+    detail: bool = True,
+    legacy_dir: Optional[str] = None,
+    daemon_name: Optional[str] = None,
+    type_of_daemon: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    legacy_cache: Dict[str, Any] = {}
+    ls = []
+
+    data_dir = ctx.data_dir
+    if legacy_dir is not None:
+        data_dir = os.path.abspath(legacy_dir + data_dir)
+
+    if not os.path.exists(data_dir):
+        # data_dir (/var/lib/ceph typically) is missing. Return empty list.
+        logger.warning('%s is missing: no daemon listing available', data_dir)
+        return []
+
+    # keep track of ceph versions we see
+    seen_versions: Dict[str, Optional[str]] = {}
+
+    # keep track of image digests
+    seen_digests: Dict[str, List[str]] = {}
+
+    # keep track of memory and cpu usage we've seen
+    seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(ctx)
+    seen_cpuperc_cid_len, seen_cpuperc = parsed_container_cpu_perc(ctx)
+
+    daemon_entries = daemons_matching(
+        ctx,
+        legacy_dir,
+        daemon_name=daemon_name,
+        type_of_daemon=type_of_daemon,
+    )
+    for entry in daemon_entries:
+        if isinstance(entry, LegacyDaemonEntry):
+            status = cast(Dict[str, Any], entry.status)
+            if detail:
+                _update_legacy_status(
+                    status, ctx, entry.name, legacy_cache,
+                )
+            ls.append(status)
+        else:
+            status = cast(Dict[str, Any], entry.status)
+            if detail:
+                _update_daemon_and_container_status(
+                    status,
+                    ctx,
+                    entry.identity,
+                    data_dir,
+                    seen_versions,
+                    seen_digests,
+                    seen_memusage_cid_len,
+                    seen_memusage,
+                    seen_cpuperc_cid_len,
+                    seen_cpuperc,
+                )
+            ls.append(status)
+    return ls
 
 
 def list_daemons(
