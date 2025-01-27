@@ -3,7 +3,7 @@
 import os
 import logging
 
-from typing import TypedDict, Union, Optional, Iterator
+from typing import TypedDict, Union, Optional, Iterator, List
 
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity
@@ -139,3 +139,20 @@ def daemons_matching(
         else:
             raise ValueError(f'unexpected entry type: {entry}')
         yield entry
+
+
+def daemons_summary(
+    ctx: CephadmContext,
+    legacy_dir: Optional[str] = None,
+    daemon_name: Optional[str] = None,
+    type_of_daemon: Optional[str] = None,
+) -> List[BasicDaemonStatus]:
+    return [
+        e.status
+        for e in daemons_matching(
+            ctx,
+            legacy_dir,
+            daemon_name=daemon_name,
+            type_of_daemon=type_of_daemon,
+        )
+    ]
