@@ -31,6 +31,7 @@ class LegacyDaemonEntry:
     daemon_type: str
     name: str
     status: BasicDaemonStatus
+    data_dir: str
 
     def __init__(
         self,
@@ -38,22 +39,29 @@ class LegacyDaemonEntry:
         daemon_type: str,
         name: str,
         status: BasicDaemonStatus,
+        data_dir: str,
     ) -> None:
         self.fsid = fsid
         self.daemon_type = daemon_type
         self.name = name
         self.status = status
+        self.data_dir = data_dir
 
 
 class DaemonEntry:
     identity: DaemonIdentity
     status: BasicDaemonStatus
+    data_dir: str
 
     def __init__(
-        self, identity: DaemonIdentity, status: BasicDaemonStatus
+        self,
+        identity: DaemonIdentity,
+        status: BasicDaemonStatus,
+        data_dir: str,
     ) -> None:
         self.identity = identity
         self.status = status
+        self.data_dir = data_dir
 
 
 def daemons(
@@ -95,6 +103,7 @@ def daemons(
                         'fsid': fsid if fsid is not None else 'unknown',
                         'systemd_unit': legacy_unit_name,
                     },
+                    data_dir=data_dir,
                 )
         elif is_fsid(dirname):
             assert isinstance(dirname, str)
@@ -115,6 +124,7 @@ def daemons(
                         'fsid': fsid,
                         'systemd_unit': identity.unit_name,
                     },
+                    data_dir=data_dir,
                 )
 
 
