@@ -3399,9 +3399,7 @@ def list_daemons_new(
     daemon_name: Optional[str] = None,
     type_of_daemon: Optional[str] = None,
 ) -> List[Dict[str, str]]:
-    ls = []
-
-    _updater = DaemonStatusUpdater()
+    _updater: DaemonStatusUpdater = NoOpDaemonStatusUpdater()
     if detail:
         detail_updaters = [
             CoreStatusUpdater(),
@@ -3418,23 +3416,7 @@ def list_daemons_new(
         daemon_name=daemon_name,
         type_of_daemon=type_of_daemon,
     )
-    for entry in daemon_entries:
-        if isinstance(entry, LegacyDaemonEntry):
-            status = cast(Dict[str, Any], entry.status)
-            _updater.legacy_update(
-                status,
-                ctx,
-                entry.fsid,
-                entry.daemon_type,
-                entry.name,
-                entry.data_dir,
-            )
-            ls.append(status)
-        else:
-            status = cast(Dict[str, Any], entry.status)
-            _updater.update(status, ctx, entry.identity, entry.data_dir)
-            ls.append(status)
-    return ls
+    return [_updater.expand(ctx, entry) for entry in daemon_entries]
 
 
 def list_daemons_old(
