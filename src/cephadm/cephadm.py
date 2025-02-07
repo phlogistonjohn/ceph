@@ -90,7 +90,6 @@ from cephadmlib.container_engines import (
     check_container_engine,
     find_container_engine,
     normalize_container_id,
-    parsed_container_cpu_perc,
     parsed_container_image_stats,
     parsed_container_mem_usage,
     pull_command,
