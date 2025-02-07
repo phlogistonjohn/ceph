@@ -168,6 +168,32 @@ def daemons_summary(
     ]
 
 
+# the DaemonStatusUpdater base class and subclasses of such are meant
+# to gather additional data from a the listing functions (that yield
+# entry classes).
+#
+# The goals of DaemonStatusUpdater include providing a formalized and
+# well-defined interface for gathering additional information about
+# a daemon/container. It is designed to support caching across invocations
+# as well as gathering/pre-caching state in the when the updater is
+# initialized. The update and legacy_update functions are meant to be
+# used by sub-classes that mutate an existing status dictionary.
+# The expand method is designed to be used in iterator or list-comprehensions
+# in order to processes entries returned from the daemons and daemons_matching
+# functions. For example:
+# my_updater = MyCoolUpdater()
+# results = [my_updater.expand(ctx, entry) for entry in daemons(ctx)]
+#
+# In addition to the base class, a NoOpDaemonStatusUpdater class is provided
+# for cases where an updater is needed but the updater should never mutate
+# the status dict returned during iteration.
+#
+# A CombinedStatusUpdater class exists so that multiple updaters can
+# be easily combined. The init method of the class takes a list of
+# other DaemonStatusUpdater classes and calls them (in order) to
+# update the status dict.
+
+
 class DaemonStatusUpdater:
     """Base class for types that can update and/or expand the daemon information
     provided by the core listing functions in this module.
