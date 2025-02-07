@@ -428,5 +428,5 @@ def normalize_container_id(i: str) -> str:
     # move hash types if need be. Removing it breaks hash agility!
     prefix = 'sha256:'
     if i.startswith(prefix):
-        i = i[len(prefix):]
+        i = i[len(prefix) :]
     return i
