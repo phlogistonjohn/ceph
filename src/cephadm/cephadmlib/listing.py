@@ -3,7 +3,7 @@
 import os
 import logging
 
-from typing import TypedDict, Union, Optional, Iterator, List
+from typing import TypedDict, Union, Optional, Iterator, List, Any, Dict, cast
 
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity
@@ -166,3 +166,92 @@ def daemons_summary(
             type_of_daemon=type_of_daemon,
         )
     ]
+
+
+class DaemonStatusUpdater:
+    """Base class for types that can update and/or expand the daemon information
+    provided by the core listing functions in this module.
+    """
+
+    def update(
+        self,
+        val: Dict[str, Any],
+        ctx: CephadmContext,
+        identity: DaemonIdentity,
+        data_dir: str,
+    ) -> None:
+        """Update the val dict with new status information for the daemon with
+        the given identity and configuration dir.
+        """
+        pass
+
+    def legacy_update(
+        self,
+        val: Dict[str, Any],
+        ctx: CephadmContext,
+        fsid: str,
+        daemon_type: str,
+        name: str,
+        data_dir: str,
+    ) -> None:
+        """Update the val dict with new status information for a legacy daemon
+        described by the given parameters and configuration dir.
+        """
+        pass
+
+    def expand(
+        self,
+        ctx: CephadmContext,
+        entry: Union[LegacyDaemonEntry, DaemonEntry],
+    ) -> Dict[str, Any]:
+        if isinstance(entry, LegacyDaemonEntry):
+            status = cast(Dict[str, Any], entry.status)
+            self.legacy_update(
+                status,
+                ctx,
+                entry.fsid,
+                entry.daemon_type,
+                entry.name,
+                entry.data_dir,
+            )
+            return status
+        status = cast(Dict[str, Any], entry.status)
+        self.update(status, ctx, entry.identity, entry.data_dir)
+        return status
+
+
+class NoOpDaemonStatusUpdater(DaemonStatusUpdater):
+    """A daemon status updater that adds no new information to the status
+    dictionary.
+    """
+
+    pass
+
+
+class CombinedStatusUpdater(DaemonStatusUpdater):
+    """A status updater that combines multiple status updaters together."""
+
+    def __init__(self, updaters: List[DaemonStatusUpdater]):
+        self.updaters = updaters
+
+    def update(
+        self,
+        val: Dict[str, Any],
+        ctx: CephadmContext,
+        identity: DaemonIdentity,
+        data_dir: str,
+    ) -> None:
+        for updater in self.updaters:
+            updater.update(val, ctx, identity, data_dir)
+
+    def legacy_update(
+        self,
+        val: Dict[str, Any],
+        ctx: CephadmContext,
+        fsid: str,
+        daemon_type: str,
+        name: str,
+        data_dir: str,
+    ) -> None:
+        for updater in self.updaters:
+            updater.legacy_update(val, ctx, fsid, daemon_type, name, data_dir)
