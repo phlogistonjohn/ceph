@@ -200,6 +200,13 @@ from cephadmlib.listing import (
     daemons_matching,
     daemons_summary,
 )
+from cephadmlib.listing_updaters import (
+    CPUUsageStatusUpdater,
+    CoreStatusUpdater,
+    DigestsStatusUpdater,
+    MemUsageStatusUpdater,
+    VersionStatusUpdater,
+)
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
