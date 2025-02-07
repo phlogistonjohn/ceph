@@ -194,7 +194,9 @@ from cephadmlib.daemons import (
 )
 from cephadmlib.agent import http_query
 from cephadmlib.listing import (
-    LegacyDaemonEntry,
+    DaemonStatusUpdater,
+    NoOpDaemonStatusUpdater,
+    CombinedStatusUpdater,
     daemons_matching,
     daemons_summary,
 )
