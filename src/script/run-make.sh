@@ -116,7 +116,7 @@ EOM
     cmake_opts+=" -DWITH_FIO=ON"
     cmake_opts+=" -DWITH_CEPHFS_SHELL=ON"
     cmake_opts+=" -DWITH_GRAFANA=ON"
-    cmake_opts+=" -DWITH_SPDK=ON"
+    cmake_opts+=" -DWITH_SPDK=OFF"
     cmake_opts+=" -DWITH_RBD_MIRROR=ON"
     if [ $WITH_SEASTAR ]; then
         cmake_opts+=" -DWITH_SEASTAR=ON"
