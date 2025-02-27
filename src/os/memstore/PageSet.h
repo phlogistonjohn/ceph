@@ -80,7 +80,9 @@ struct Page {
   Page(char *data, uint64_t offset) : data(data), offset(offset), nrefs(1) {}
 
   static void operator delete(void *p) {
+    if (p) {
     delete[] reinterpret_cast<Page*>(p)->data;
+    }
   }
 };
 
