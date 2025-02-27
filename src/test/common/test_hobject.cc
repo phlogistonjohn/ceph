@@ -285,9 +285,12 @@ TEST(HObject, fmt_random)
 
     auto name_length = (i * 17) % 51;
     std::string name;
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wsign-compare"
     for (int j = 0; j < name_length; j++) {
       name.push_back((i * name_length + j) % 256);
     }
+# pragma GCC diagnostic pop
 
     std::string key =
 	(i % 3) ? fmt::format("key_{}::", static_cast<unsigned char>(i)) : name;
