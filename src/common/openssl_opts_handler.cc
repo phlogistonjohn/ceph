@@ -17,6 +17,7 @@
 #include <openssl/bio.h>
 #include <openssl/conf.h>
 #include <openssl/engine.h>
+#include <openssl/err.h>
 #include <mutex>
 #include <vector>
 #include <algorithm>
@@ -29,6 +30,10 @@
 using std::string;
 using std::ostream;
 using std::vector;
+
+extern "C" {
+  extern void ENGINE_load_builtin_engines(void);
+}
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
