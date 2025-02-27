@@ -507,12 +507,15 @@ void cartesian_apply(F func, std::array<V, S> const & ... array_args) {
   for (long long n = 0; n < N; ++n) {
     std::lldiv_t q { n, 0 };
 
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wsequence-point"
     // we use parameter pack expansion as part of the brace initializer
     // to perform sequential calculation of the 
     auto apply_tuple = std::tuple<V const &...> { 
       (q = div(q.quot, array_args.size()), array_args.at(q.rem)) 
       ... 
     };
+# pragma GCC diagnostic pop
 
     if (!std::apply(func, apply_tuple)) {
       return;
