@@ -85,7 +85,10 @@ namespace TOPNSPC::common {
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
 			   string_view k, mds_gid_t &val)
 {
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wcast-user-defined"
   return cmd_getval(cmdmap, k, (int64_t&)val);
+# pragma GCC diagnostic pop
 }
 
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
