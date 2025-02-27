@@ -1672,10 +1672,16 @@ protected:
   // TODO: switch to std::atomic<OSDMapRef> when C++20 will be available.
   OSDMapRef       _osdmap;
   void set_osdmap(OSDMapRef osdmap) {
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     std::atomic_store(&_osdmap, osdmap);
+# pragma GCC diagnostic pop
   }
   OSDMapRef get_osdmap() const {
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     return std::atomic_load(&_osdmap);
+# pragma GCC diagnostic pop
   }
   epoch_t get_osdmap_epoch() const {
     // XXX: performance?
