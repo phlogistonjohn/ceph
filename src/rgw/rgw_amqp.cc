@@ -2,10 +2,10 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_amqp.h"
-#include <amqp.h>
-#include <amqp_ssl_socket.h>
-#include <amqp_tcp_socket.h>
-#include <amqp_framing.h>
+#include <rabbitmq-c/amqp.h>
+#include <rabbitmq-c/ssl_socket.h>
+#include <rabbitmq-c/tcp_socket.h>
+#include <rabbitmq-c/framing.h>
 #include "include/ceph_assert.h"
 #include <sstream>
 #include <cstring>
