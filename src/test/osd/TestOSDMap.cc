@@ -426,6 +426,8 @@ public:
         cout << "<<<<<PGs distribution:" << std::endl;
       }
       int high_load_after = 0;
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wsign-compare"
       for (auto i = 0 ; i < weights.size() ; i++) {
         int pgs = pgs_by_osd[i].size();
         int prims = prim_pgs_by_osd[i].size();
@@ -441,6 +443,7 @@ public:
           high_load_after = cur_load;
         }
       }
+# pragma GCC diagnostic pop
       if (verbose) {
         cout << "=== Read ratio: " << rr << " High load before: " << high_load_before << " High load after: " << high_load_after << std::endl;
       }
