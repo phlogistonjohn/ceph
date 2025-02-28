@@ -1007,11 +1007,17 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     }
 
     // atomically reset the data IOContext to new version
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     atomic_store(&data_io_context, ctx);
+# pragma GCC diagnostic pop
   }
 
   IOContext ImageCtx::get_data_io_context() const {
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     return atomic_load(&data_io_context);
+# pragma GCC diagnostic pop
   }
 
   IOContext ImageCtx::duplicate_data_io_context() const {
