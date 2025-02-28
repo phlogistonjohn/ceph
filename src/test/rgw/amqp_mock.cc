@@ -2,9 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "amqp_mock.h"
-#include <amqp.h>
-#include <amqp_ssl_socket.h>
-#include <amqp_tcp_socket.h>
+#include <rabbitmq-c/amqp.h>
+#include <rabbitmq-c/ssl_socket.h>
+#include <rabbitmq-c/tcp_socket.h>
 #include <string>
 #include <stdarg.h>
 #include <mutex>
