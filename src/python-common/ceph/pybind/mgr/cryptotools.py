@@ -169,28 +169,26 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(required=True)
 
     # create the parser for the "password_hash" command
-    parser_foo = subparsers.add_parser('password_hash')
-    parser_foo.set_defaults(func=password_hash)
+    parser_password_hash = subparsers.add_parser('password_hash')
+    parser_password_hash.set_defaults(func=password_hash)
 
     # create the parser for the "create_self_signed_cert" command
-    parser_bar = subparsers.add_parser('create_self_signed_cert')
-    parser_bar.add_argument('--private_key', required=False, action='store_true')
-    parser_bar.add_argument('--certificate', required=False, action='store_true')
-    parser_bar.set_defaults(func=create_self_signed_cert)
+    parser_cssc = subparsers.add_parser('create_self_signed_cert')
+    parser_cssc.add_argument('--private_key', required=False, action='store_true')
+    parser_cssc.add_argument('--certificate', required=False, action='store_true')
+    parser_cssc.set_defaults(func=create_self_signed_cert)
 
     # create the parser for the "verify_cacrt_content" command
-    parser_bar = subparsers.add_parser('verify_cacrt_content')
-    parser_bar.set_defaults(func=verify_cacrt_content)
+    parser_vcc = subparsers.add_parser('verify_cacrt_content')
+    parser_vcc.set_defaults(func=verify_cacrt_content)
 
     # create the parser for the "get_cert_issuer_info" command
-    parser_bar = subparsers.add_parser('get_cert_issuer_info')
-    parser_bar.add_argument('--org_name', required=False, action='store_true')
-    parser_bar.add_argument('--cn', required=False, action='store_true')
-    parser_bar.set_defaults(func=get_cert_issuer_info)
+    parser_gcii = subparsers.add_parser('get_cert_issuer_info')
+    parser_gcii.set_defaults(func=get_cert_issuer_info)
 
     # create the parser for the "verify_tls" command
-    parser_bar = subparsers.add_parser('verify_tls')
-    parser_bar.set_defaults(func=verify_tls)
+    parser_verify_tls = subparsers.add_parser('verify_tls')
+    parser_verify_tls.set_defaults(func=verify_tls)
 
     # parse the args and call whatever function was selected
     args = parser.parse_args()
