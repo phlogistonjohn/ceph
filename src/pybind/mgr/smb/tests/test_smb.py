@@ -869,7 +869,7 @@ KNDwOknnnEhdXshW5M8G8ZhkahG8YABHTBw=
 """
 
 
-def test_apply_tls_credential(tmodule):
+def test_tls_credential(tmodule):
     _example_cfg_1(tmodule)
 
     txt = json.dumps(
@@ -888,3 +888,44 @@ def test_apply_tls_credential(tmodule):
     assert len(ts['results']) == 1
     r = ts['results'][0]['resource']
     assert r['resource_type'] == 'ceph.smb.tls.credential'
+    out = tmodule.show()
+    res = out.get('resources')
+    assert res
+    assert len(res) == 5
+    clusters = [r for r in res if r['resource_type'] == 'ceph.smb.cluster']
+    assert len(clusters) == 1
+    shares = [r for r in res if r['resource_type'] == 'ceph.smb.share']
+    assert len(shares) == 2
+    jauths = [r for r in res if r['resource_type'] == 'ceph.smb.join.auth']
+    assert len(jauths) == 1
+    tcs = [r for r in res if r['resource_type'] == 'ceph.smb.tls.credential']
+    assert len(tcs) == 1
+    assert tcs[0]['credential_type'] == 'cert'
+    assert tcs[0]['value'] == cert1
+
+
+def test_tls_credential_yaml_show(tmodule):
+    _example_cfg_1(tmodule)
+
+    txt = json.dumps(
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'tc1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        }
+    )
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+    ts = rg.to_simplified()
+    assert len(ts['results']) == 1
+    r = ts['results'][0]['resource']
+    assert r['resource_type'] == 'ceph.smb.tls.credential'
+    res, body, status = tmodule.show.command(
+        ['ceph.smb.tls.credential'], format='yaml'
+    )
+    assert res == 0
+    body = body.strip()
+    assert 'value: |' in body
