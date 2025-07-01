@@ -206,6 +206,25 @@ class UsersAndGroupsEntry(CommonResourceEntry):
         return self.get_resource_type(resources.UsersAndGroups)
 
 
+class TLSCredentialEntry(ResourceEntry):
+    """TLSCredentialEntry resource getter/setter for the smb internal data
+    store(s).
+    """
+
+    namespace = ConfigNS.TLS_CREDENTIALS
+
+    @classmethod
+    def from_store(cls, store: ConfigStore, auth_id: str) -> Self:
+        return cls.from_store_by_key(store, auth_id)
+
+    @classmethod
+    def ids(cls, store: ConfigStoreListing) -> Collection[str]:
+        return store.contents(str(cls.namespace))
+
+    def get_tls_credential(self) -> resources.TLSCredential:
+        return self.get_resource_type(resources.TLSCredential)
+
+
 def _map_resource_entry(
     resource: Union[SMBResource, Type[SMBResource]]
 ) -> Type[ResourceEntry]:
