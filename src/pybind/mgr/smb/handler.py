@@ -54,6 +54,7 @@ ShareRef = Union[resources.Share, resources.RemovedShare]
 _DOMAIN = 'domain'
 _CLUSTERED = 'clustered'
 _CEPHFS_PROXY = 'cephfs-proxy'
+_REMOTE_CONTROL = 'remote-control'
 log = logging.getLogger(__name__)
 
 
@@ -852,6 +853,8 @@ def _generate_smb_service_spec(
         features.append(_CLUSTERED)
     if needs_proxy:
         features.append(_CEPHFS_PROXY)
+    if cluster.remote_control_is_enabled:
+        features.append(_REMOTE_CONTROL)
     # only one config uri can be used, the input list should be
     # ordered from lowest to highest priority and the highest priority
     # item that exists in the store will be used.
@@ -873,6 +876,12 @@ def _generate_smb_service_spec(
     user_entities: Optional[List[str]] = None
     if data_entity:
         user_entities = [data_entity]
+    rc_cert = rc_key = rc_ca_cert = None
+    if cluster.remote_control_is_enabled:
+        assert cluster.remote_control
+        rc_cert = _tls_uri(cluster.remote_control.cert)
+        rc_key = _tls_uri(cluster.remote_control.key)
+        rc_ca_cert = _tls_uri(cluster.remote_control.ca_cert)
     return SMBSpec(
         service_id=cluster.cluster_id,
         placement=cluster.placement,
@@ -886,6 +895,9 @@ def _generate_smb_service_spec(
         cluster_public_addrs=cluster.service_spec_public_addrs(),
         custom_ports=cluster.custom_ports,
         bind_addrs=cluster.service_spec_bind_addrs(),
+        remote_control_ssl_cert=rc_cert,
+        remote_control_ssl_key=rc_key,
+        remote_control_ca_cert=rc_ca_cert,
     )
 
 
