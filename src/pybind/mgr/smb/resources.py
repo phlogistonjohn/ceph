@@ -570,6 +570,15 @@ class Cluster(_RBase):
     def clustering_mode(self) -> SMBClustering:
         return self.clustering if self.clustering else SMBClustering.DEFAULT
 
+    @property
+    def remote_control_is_enabled(self) -> bool:
+        """Return true if a remote control service should be enabled for this
+        cluster.
+        """
+        if not self.remote_control:
+            return False
+        return self.remote_control.is_enabled
+
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""
         if self.clustering_mode == SMBClustering.ALWAYS:
