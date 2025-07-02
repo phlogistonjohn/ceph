@@ -522,6 +522,8 @@ class Cluster(_RBase):
     # bind_addrs are used to restrict what IP addresses instances of this
     # cluster will use
     bind_addrs: Optional[List[ClusterBindIP]] = None
+    # configure a remote control sidecar server.
+    remote_control: Optional[RemoteControl] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
