@@ -1024,3 +1024,9 @@ def _has_proxied_vfs(change_group: ClusterChangeGroup) -> bool:
 
 def _smb_port(cluster: resources.Cluster, default: int = 445) -> int:
     return (cluster.custom_ports or {}).get("smb", default)
+
+
+def _tls_uri(src: Optional[resources.TLSSource]) -> Optional[str]:
+    if src is None:
+        return None
+    return 'URI:rados:TODO-FIXME-YIKES'
