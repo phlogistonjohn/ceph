@@ -479,6 +479,7 @@ class ClusterConfigHandler:
         chg_cluster_ids: Set[str] = set()
         chg_join_ids: Set[str] = set()
         chg_ug_ids: Set[str] = set()
+        chg_tls_ids: Set[str] = set()
         for result in updated:
             state = (result.status or {}).get('state', None)
             if state in (State.PRESENT, State.NOT_PRESENT):
@@ -497,11 +498,13 @@ class ClusterConfigHandler:
                 chg_join_ids.add(result.src.auth_id)
             elif isinstance(result.src, resources.UsersAndGroups):
                 chg_ug_ids.add(result.src.users_groups_id)
+            elif isinstance(result.src, resources.TLSCredential):
+                chg_tls_ids.add(result.src.tls_credential_id)
 
         # TODO: here's a lazy bit. if any join auths or users/groups changed we
         # will regen all clusters because these can be shared by >1 cluster.
         # In future, make this only pick clusters using the named resources.
-        if chg_join_ids or chg_ug_ids:
+        if chg_join_ids or chg_ug_ids or chg_tls_ids:
             chg_cluster_ids.update(ClusterEntry.ids(self.internal_store))
         return chg_cluster_ids
 
