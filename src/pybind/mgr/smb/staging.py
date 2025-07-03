@@ -551,7 +551,7 @@ def _check_tls_credential_removed(
     refs_in_use: Dict[str, List[str]] = {}
     for cluster_id in cids:
         cluster = staging.get_cluster(cluster_id)
-        for ref in _tls_refs(cluster):
+        for ref in tls_refs(cluster):
             refs_in_use.setdefault(ref, []).append(cluster_id)
     log.debug('refs_in_use: %r', refs_in_use)
     if tls_cred.tls_credential_id in refs_in_use:
@@ -586,7 +586,7 @@ def _tls_ref(src: Optional[resources.TLSSource]) -> str:
     return ''
 
 
-def _tls_refs(cluster: resources.Cluster) -> Collection[str]:
+def tls_refs(cluster: resources.Cluster) -> Collection[str]:
     if not cluster.remote_control:
         return set()
     refs = (
