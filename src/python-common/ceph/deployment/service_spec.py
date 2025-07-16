@@ -3310,7 +3310,7 @@ class SMBSpec(ServiceSpec):
     # feature names. use for feature flags and (optionally) service names if it
     # spawns a network service. helps avoid typos and ensure consistent
     # spelling. Keep sorted.
-    _cephfs_proxy = 'cephfs_proxy'
+    _cephfs_proxy = 'cephfs-proxy'
     _clustered = 'clustered'
     _ctdb = 'ctdb'
     _domain = 'domain'
