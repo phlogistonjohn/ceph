@@ -21,6 +21,7 @@ from .enums import (
     CephFSStorageProvider,
     Intent,
     JoinSourceType,
+    KeyBridgeScopeType,
     LoginAccess,
     LoginCategory,
     PasswordFilter,
@@ -508,6 +509,83 @@ class RemoteControl(_RBase):
         if self.enabled is not None:
             return self.enabled
         return bool(self.cert and self.key)
+
+
+@resourcelib.component()
+class KeyBridgeScope(_RBase):
+    name: str
+    # KMIP fields
+    kmip_hostnames: Optional[List[str]] = None
+    kmip_port: Optional[int] = None
+    kmip_cert: Optional[TLSSource] = None
+    kmip_key: Optional[TLSSource] = None
+    kmip_ca_cert: Optional[TLSSource] = None
+
+    @property
+    def scope_type(self) -> KeyBridgeScopeType:
+        return KeyBridgeScopeType(self.name.split('.', 1)[0])
+
+    @property
+    def subname(self) -> str:
+        if '.' not in self.name:
+            return ''
+        return self.name.split('.', 1)[-1]
+
+    def validate(self) -> None:
+        try:
+            _type = self.scope_type
+        except ValueError:
+            scopes = sorted(st.value for st in KeyBridgeScopeType)
+            raise ValueError(f'invalid scope type: must be one of {scopes}')
+        if _type.unique() and str(_type) != self.name:
+            raise ValueError(f'invalid name for {self.name}, must be {_type}')
+        elif self.subname:
+            validation.check_id(self.subname)
+        vfn = {
+            KeyBridgeScopeType.KMIP: self.validate_kmip,
+            KeyBridgeScopeType.MEM: self.validate_mem,
+        }
+        vfn[_type]()
+
+    def validate_kmip(self) -> None:
+        if not self.kmip_hostnames:
+            raise ValueError('at least one kmip hostname is required')
+        if not self.kmip_port:
+            raise ValueError('a kmip server port is required')
+        # TODO: should tls credentials be always required?
+        if not (self.kmip_cert and self.kmip_key and self.kmip_ca_cert):
+            raise ValueError('kmip requires a cert, a key, and a ca cert')
+
+    def validate_mem(self) -> None:
+        if (
+            self.kmip_hostnames
+            or self.kmip_port
+            or self.kmip_cert
+            or self.kmip_key
+            or self.kmip_ca_cert
+        ):
+            raise ValueError('mem scope does not support kmip parameters')
+
+
+@resourcelib.component()
+class KeyBridge(_RBase):
+    # enabled can be set to explicitly toggle the keybridge server
+    enabled: Optional[bool] = None
+    scopes: Optional[List[KeyBridgeScope]] = None
+
+    @property
+    def is_enabled(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        return bool(self.scopes)
+
+    def validate(self) -> None:
+        if self.enabled and not self.scopes:
+            raise ValueError(
+                'an enabled KeyBridge requires at least one scope'
+            )
+        for scope in self.scopes or []:
+            scope.validate()
 
 
 @resourcelib.resource('ceph.smb.cluster')
