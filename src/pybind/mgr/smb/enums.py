@@ -144,3 +144,11 @@ class TLSCredentialType(_StrEnum):
     CERT = 'cert'
     KEY = 'key'
     CA_CERT = 'ca-cert'
+
+
+class KeyBridgeScopeType(_StrEnum):
+    MEM = 'mem'
+    KMIP = 'kmip'
+
+    def unique(self) -> bool:
+        return self in {self.MEM}
