@@ -610,6 +610,7 @@ class Cluster(_RBase):
     bind_addrs: Optional[List[ClusterBindIP]] = None
     # configure a remote control sidecar server.
     remote_control: Optional[RemoteControl] = None
+    keybridge: Optional[KeyBridge] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
