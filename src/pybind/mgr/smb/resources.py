@@ -597,7 +597,7 @@ class KeyBridgeScope(_RBase):
     # like "kmip.1")
     name: str
     # KMIP fields
-    kmip_hostnames: Optional[List[str]] = None
+    kmip_hosts: Optional[List[str]] = None
     kmip_port: Optional[int] = None
     kmip_cert: Optional[TLSSource] = None
     kmip_key: Optional[TLSSource] = None
@@ -615,17 +615,20 @@ class KeyBridgeScope(_RBase):
         vfn[kbsi.scope_type]()
 
     def validate_kmip(self) -> None:
-        if not self.kmip_hostnames:
+        if not self.kmip_hosts:
             raise ValueError('at least one kmip hostname is required')
-        if not self.kmip_port:
-            raise ValueError('a kmip server port is required')
+        if not (self.kmip_port or all(':' in h for h in self.kmip_hosts)):
+            raise ValueError(
+                'a kmip default port is required unless all'
+                ' hosts include a port'
+            )
         # TODO: should tls credentials be always required?
         if not (self.kmip_cert and self.kmip_key and self.kmip_ca_cert):
             raise ValueError('kmip requires a cert, a key, and a ca cert')
 
     def validate_mem(self) -> None:
         if (
-            self.kmip_hostnames
+            self.kmip_hosts
             or self.kmip_port
             or self.kmip_cert
             or self.kmip_key
