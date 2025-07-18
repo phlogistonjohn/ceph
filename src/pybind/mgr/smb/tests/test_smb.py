@@ -974,7 +974,7 @@ def _keybridge_example():
                     {"name": "mem"},
                     {
                         "name": "kmip",
-                        "kmip_hostnames": ["zorg.example.net"],
+                        "kmip_hosts": ["zorg.example.net"],
                         "kmip_port": 78989,
                         "kmip_cert": {"ref": "cert1"},
                         "kmip_key": {"ref": "key1"},
@@ -1031,14 +1031,14 @@ def test_keybridge_config(tmodule):
         dict(scopes=[], enabled=True, expected='at least one scope'),
         dict(scopes=[{'name': 'kmip'}], expected='kmip hostname'),
         dict(
-            scopes=[{'name': 'kmip', 'kmip_hostnames': ['foo.example.org']}],
+            scopes=[{'name': 'kmip', 'kmip_hosts': ['foo.example.org']}],
             expected='kmip server port',
         ),
         dict(
             scopes=[
                 {
                     'name': 'kmip',
-                    'kmip_hostnames': ['foo.example.org'],
+                    'kmip_hosts': ['foo.example.org'],
                     'kmip_port': 67890,
                 }
             ],
@@ -1048,7 +1048,7 @@ def test_keybridge_config(tmodule):
             scopes=[
                 {
                     'name': 'mem',
-                    'kmip_hostnames': ['foo.example.org'],
+                    'kmip_hosts': ['foo.example.org'],
                     'kmip_port': 67890,
                 }
             ],
