@@ -152,3 +152,8 @@ class KeyBridgeScopeType(_StrEnum):
 
     def unique(self) -> bool:
         return self in {self.MEM}
+
+
+class KeyBridgePeerPolicy(_StrEnum):
+    RESTRICTED = 'restricted'
+    UNRESTRICTED = 'unrestricted'
