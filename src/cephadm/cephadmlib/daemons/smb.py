@@ -56,6 +56,7 @@ class Features(enum.Enum):
     CLUSTERED = 'clustered'
     CEPHFS_PROXY = 'cephfs-proxy'
     REMOTE_CONTROL = 'remote-control'
+    KEYBRIDGE = 'keybridge'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -166,7 +167,7 @@ class RemoteControlConfig:
     tls_files: TLSFiles
 
 
-@dataclass.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class KeyBridgeConfig:
     tls_files: TLSFiles
     socket = 'unix:/run/keybridge.s'
@@ -438,7 +439,7 @@ class KeyBridgeContainer(SambaContainerCommon):
 
     def args(self) -> List[str]:
         args = super().args()
-        assert self.cfg.keybridge, "keybridge is not configured"
+        assert self.cfg.keybridge, 'keybridge is not configured'
         args.append('keybridge')
         if self.cfg.keybridge.tls_files:
             cert_path = self.cfg.keybridge.tls_files.cert_interior_path
@@ -453,9 +454,7 @@ class KeyBridgeContainer(SambaContainerCommon):
         return args
 
     def container_args(self) -> List[str]:
-        return super().container_args() + [
-            '--entrypoint=samba-satellite'
-        ]
+        return super().container_args() + ['--entrypoint=samba-satellite']
 
 
 class CephFSProxyContainer(ContainerCommon):
