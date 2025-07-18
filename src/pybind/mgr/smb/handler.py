@@ -64,6 +64,7 @@ _DOMAIN = 'domain'
 _CLUSTERED = 'clustered'
 _CEPHFS_PROXY = 'cephfs-proxy'
 _REMOTE_CONTROL = 'remote-control'
+_KEYBRIDGE = 'keybridge'
 log = logging.getLogger(__name__)
 
 
@@ -875,6 +876,8 @@ def _generate_smb_service_spec(
         features.append(_CEPHFS_PROXY)
     if cluster.remote_control_is_enabled:
         features.append(_REMOTE_CONTROL)
+    if cluster.keybridge_is_enabled:
+        features.append(_KEYBRIDGE)
     # only one config uri can be used, the input list should be
     # ordered from lowest to highest priority and the highest priority
     # item that exists in the store will be used.
