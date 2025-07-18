@@ -931,7 +931,6 @@ def test_tls_credential_yaml_show(tmodule):
     assert 'value: |' in body
 
 
-
 def _keybridge_example():
     return [
         {
@@ -1036,19 +1035,23 @@ def test_keybridge_config(tmodule):
             expected='kmip server port',
         ),
         dict(
-            scopes=[{
-                'name': 'kmip',
-                'kmip_hostnames': ['foo.example.org'],
-                'kmip_port': 67890,
-                }],
+            scopes=[
+                {
+                    'name': 'kmip',
+                    'kmip_hostnames': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
             expected='cert',
         ),
         dict(
-            scopes=[{
-                'name': 'mem',
-                'kmip_hostnames': ['foo.example.org'],
-                'kmip_port': 67890,
-                }],
+            scopes=[
+                {
+                    'name': 'mem',
+                    'kmip_hostnames': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
             expected='mem',
         ),
     ],
