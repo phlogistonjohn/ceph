@@ -956,8 +956,9 @@ def _generate_keybridge_config(cluster: resources.Cluster) -> Dict[str, Any]:
         kbsi = scope.scope_identity()
         scope_config: Simplified = {'name': str(kbsi.qualified())}
         if kbsi.scope_type is KeyBridgeScopeType.KMIP:
-            scope_config['hostnames'] = checked(scope.kmip_hostnames)
-            scope_config['port'] = checked(scope.kmip_port)
+            scope_config['hostnames'] = checked(scope.kmip_hosts)
+            if scope.kmip_port:
+                scope_config['port'] = checked(scope.kmip_port)
         scopes.append(scope_config)
     cfg: Simplified = {'scopes': scopes}
     if (
