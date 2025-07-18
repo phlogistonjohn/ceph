@@ -23,6 +23,8 @@ from .enums import (
     AuthMode,
     CephFSStorageProvider,
     JoinSourceType,
+    KeyBridgePeerPolicy,
+    KeyBridgeScopeType,
     LoginAccess,
     LoginCategory,
     State,
@@ -725,12 +727,18 @@ def _generate_share(
     }
     if share.comment is not None:
         cfg['options']['comment'] = share.comment
-
     if share.max_connections is not None:
         cfg['options']['max connections'] = str(share.max_connections)
-
     if proxy_val:
         cfg['options'][f'{ceph_vfs}:proxy'] = proxy_val
+    if cephfs.fscrypt_key:
+        # enable fscrypt + keybridge
+        opts = cfg['options']
+        opts[f'{ceph_vfs}:keybridge socket'] = 'unix:/run/keybridge.s'
+        opts[f'{ceph_vfs}:keybridge scope'] = str(cephfs.fscrypt_key.scope)
+        opts[f'{ceph_vfs}:keybridge name'] = str(cephfs.fscrypt_key.name)
+        opts[f'{ceph_vfs}:keybridge kind'] = 'B64'
+        opts[f'{ceph_vfs}:fscrypt'] = 'keybridge'
     # extend share with user+group login access lists
     _generate_share_login_control(share, cfg)
     # extend share with custom options
@@ -832,6 +840,10 @@ def _generate_config(
         },
         'shares': share_configs,
     }
+    if cluster.keybridge_is_enabled:
+        _kb_default = 'default-keybridge'  # typically only have one
+        cfg['configs'][cluster.cluster_id]['keybridge_config'] = _kb_default
+        cfg['keybridge'] = {_kb_default: _generate_keybridge_config(cluster)}
     # insert global custom options
     custom_opts = cluster.cleaned_custom_smb_global_options
     if custom_opts:
@@ -909,6 +921,32 @@ def _generate_smb_service_spec(
         remote_control_ssl_key=rc_key,
         remote_control_ca_cert=rc_ca_cert,
     )
+
+
+def _generate_keybridge_config(cluster: resources.Cluster) -> Dict[str, Any]:
+    """generate the keybridge subsection for the sambacc config."""
+    # NOTE: the tls credentials are handled by cephadm and are passed
+    # to the keybridge server command line (by path). That's why they are
+    # not mentioned here. This could change in the future.
+    scopes: List[Simplified] = []
+    for scope in checked(cluster.keybridge).scopes or []:
+        kbsi = scope.scope_identity()
+        scope_config: Simplified = {'name': str(kbsi.qualified())}
+        if kbsi.scope_type is KeyBridgeScopeType.KMIP:
+            scope_config['hostnames'] = checked(scope.kmip_hostnames)
+            scope_config['port'] = checked(scope.kmip_port)
+        scopes.append(scope_config)
+    cfg: Simplified = {'scopes': scopes}
+    if (
+        checked(cluster.keybridge).use_peer_policy
+        is KeyBridgePeerPolicy.RESTRICTED
+    ):
+        cfg['verify_peer'] = {
+            "check_pid": "1+",
+            "check_uid": "0",
+            "check_gid": "0",
+        }
+    return cfg
 
 
 def _swap_pending_cluster_info(
