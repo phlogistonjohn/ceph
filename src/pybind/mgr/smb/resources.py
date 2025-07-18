@@ -21,6 +21,7 @@ from .enums import (
     CephFSStorageProvider,
     Intent,
     JoinSourceType,
+    KeyBridgePeerPolicy,
     KeyBridgeScopeType,
     LoginAccess,
     LoginCategory,
@@ -638,12 +639,22 @@ class KeyBridge(_RBase):
     # enabled can be set to explicitly toggle the keybridge server
     enabled: Optional[bool] = None
     scopes: Optional[List[KeyBridgeScope]] = None
+    # peer_policy allows one to change/relax the keybridge server's peer
+    # verification policy. generally this is only something a developer
+    # should change
+    peer_policy: Optional[KeyBridgePeerPolicy] = None
 
     @property
     def is_enabled(self) -> bool:
         if self.enabled is not None:
             return self.enabled
         return bool(self.scopes)
+
+    @property
+    def use_peer_policy(self) -> KeyBridgePeerPolicy:
+        if self.peer_policy is None:
+            return KeyBridgePeerPolicy.RESTRICTED
+        return self.peer_policy
 
     def validate(self) -> None:
         if self.enabled and not self.scopes:
@@ -731,6 +742,15 @@ class Cluster(_RBase):
         if not self.remote_control:
             return False
         return self.remote_control.is_enabled
+
+    @property
+    def keybridge_is_enabled(self) -> bool:
+        """Return true is a keybridge service should be enabled for this
+        cluster.
+        """
+        if not self.keybridge:
+            return False
+        return self.keybridge.is_enabled
 
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""
