@@ -132,6 +132,82 @@ class _RBase:
         return self
 
 
+class KeyBridgeScopeIdentity:
+    _AUTO_SUB = '00'
+
+    def __init__(
+        self,
+        scope_type: KeyBridgeScopeType,
+        subname: str = '',
+        *,
+        autosub: bool = False,
+    ):
+        if scope_type.unique() and subname:
+            raise ValueError(
+                f'invalid scope name {scope_type}.{subname},'
+                f' must be {scope_type}'
+            )
+        if subname:
+            # is the subname valid?
+            try:
+                validation.check_id(subname)
+            except ValueError as err:
+                raise ValueError(f'invalid scope name: {err}')
+        if autosub and not scope_type.unique():
+            # used to transform unqualified non-unique to qualified
+            subname = self._AUTO_SUB
+        elif subname and subname.startswith(self._AUTO_SUB):
+            # reserved for auto-naming and other future uses
+            raise ValueError(f'invalid scope name: reserved id: {subname}')
+        self._scope_type = scope_type
+        self._subname = subname
+
+    @property
+    def scope_type(self) -> KeyBridgeScopeType:
+        return self._scope_type
+
+    def __str__(self) -> str:
+        if self._subname:
+            return f'{self._scope_type}.{self._subname}'
+        return str(self._scope_type)
+
+    def qualified(self) -> Self:
+        if self._scope_type.unique() or self._subname:
+            return self
+        return self.__class__(self._scope_type, autosub=True)
+
+    @classmethod
+    def from_name(cls, name: str) -> Self:
+        typename, subname = name, ''
+        if '.' in name:
+            typename, subname = name.split('.', 1)
+            if not subname:
+                raise ValueError(
+                    'invalid scope name: no value after delimiter'
+                )
+        try:
+            _type = KeyBridgeScopeType(typename)
+        except ValueError:
+            scopes = sorted(st.value for st in KeyBridgeScopeType)
+            raise ValueError(f'invalid scope type: must be one of {scopes}')
+        return cls(_type, subname)
+
+
+@resourcelib.component()
+class FSCryptKeySelector(_RBase):
+    # name of the keybridge scope to use
+    scope: str
+    # name of the entity (the key) to fetch
+    name: str
+
+    def scope_identity(self) -> KeyBridgeScopeIdentity:
+        return KeyBridgeScopeIdentity.from_name(self.scope)
+
+    def validate(self) -> None:
+        self.scope_identity()  # raises value error if scope invalid
+        validation.check_id(self.name)
+
+
 @resourcelib.component()
 class CephFSStorage(_RBase):
     """Description of where in a CephFS file system a share is located."""
@@ -141,6 +217,9 @@ class CephFSStorage(_RBase):
     subvolumegroup: str = ''
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
+    # fscrypt_key is used to identify and obtain fscrypt key material
+    # from the keybridge.
+    fscrypt_key: Optional[FSCryptKeySelector] = None
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -513,6 +592,8 @@ class RemoteControl(_RBase):
 
 @resourcelib.component()
 class KeyBridgeScope(_RBase):
+    # name of the scope (can be unique, like "mem" or "kmip" or qualified
+    # like "kmip.1")
     name: str
     # KMIP fields
     kmip_hostnames: Optional[List[str]] = None
@@ -521,31 +602,16 @@ class KeyBridgeScope(_RBase):
     kmip_key: Optional[TLSSource] = None
     kmip_ca_cert: Optional[TLSSource] = None
 
-    @property
-    def scope_type(self) -> KeyBridgeScopeType:
-        return KeyBridgeScopeType(self.name.split('.', 1)[0])
-
-    @property
-    def subname(self) -> str:
-        if '.' not in self.name:
-            return ''
-        return self.name.split('.', 1)[-1]
+    def scope_identity(self) -> KeyBridgeScopeIdentity:
+        return KeyBridgeScopeIdentity.from_name(self.name)
 
     def validate(self) -> None:
-        try:
-            _type = self.scope_type
-        except ValueError:
-            scopes = sorted(st.value for st in KeyBridgeScopeType)
-            raise ValueError(f'invalid scope type: must be one of {scopes}')
-        if _type.unique() and str(_type) != self.name:
-            raise ValueError(f'invalid name for {self.name}, must be {_type}')
-        elif self.subname:
-            validation.check_id(self.subname)
+        kbsi = self.scope_identity()  # raises value error if scope invalid
         vfn = {
             KeyBridgeScopeType.KMIP: self.validate_kmip,
             KeyBridgeScopeType.MEM: self.validate_mem,
         }
-        vfn[_type]()
+        vfn[kbsi.scope_type]()
 
     def validate_kmip(self) -> None:
         if not self.kmip_hostnames:
