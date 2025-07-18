@@ -904,6 +904,26 @@ def _generate_smb_service_spec(
         rc_ca_cert = _tls_uri(
             cluster.remote_control.ca_cert, tls_credential_entries
         )
+    kb_cert = kb_key = kb_ca_cert = None
+    if cluster.keybridge_is_enabled:
+        assert cluster.keybridge  # type narrow
+        # TODO: current all KMIP scopes must share the same tls creds
+        # and that sucks. need to update keybridge to fetch cert URIs directly
+        # and stop shoveling this all through cephadm.
+        # This is especially important if we ever add non-kmip scopes that
+        # use (m)TLS.
+        kmip_scopes = [
+            s
+            for s in checked(cluster.keybridge.scopes)
+            if s.scope_identity().scope_type == KeyBridgeScopeType.KMIP
+        ]
+        if kmip_scopes:
+            kmip_scope = kmip_scopes[0]
+            kb_cert = _tls_uri(kmip_scope.kmip_cert, tls_credential_entries)
+            kb_key = _tls_uri(kmip_scope.kmip_key, tls_credential_entries)
+            kb_ca_cert = _tls_uri(
+                kmip_scope.kmip_ca_cert, tls_credential_entries
+            )
     return SMBSpec(
         service_id=cluster.cluster_id,
         placement=cluster.placement,
@@ -920,6 +940,9 @@ def _generate_smb_service_spec(
         remote_control_ssl_cert=rc_cert,
         remote_control_ssl_key=rc_key,
         remote_control_ca_cert=rc_ca_cert,
+        keybridge_kmip_ssl_cert=kb_cert,
+        keybridge_kmip_ssl_key=kb_key,
+        keybridge_kmip_ca_cert=kb_ca_cert,
     )
 
 
