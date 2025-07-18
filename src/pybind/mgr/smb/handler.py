@@ -735,7 +735,9 @@ def _generate_share(
         # enable fscrypt + keybridge
         opts = cfg['options']
         opts[f'{ceph_vfs}:keybridge socket'] = 'unix:/run/keybridge.s'
-        opts[f'{ceph_vfs}:keybridge scope'] = str(cephfs.fscrypt_key.scope)
+        opts[f'{ceph_vfs}:keybridge scope'] = str(
+            cephfs.fscrypt_key.scope_identity().qualified()
+        )
         opts[f'{ceph_vfs}:keybridge name'] = str(cephfs.fscrypt_key.name)
         opts[f'{ceph_vfs}:keybridge kind'] = 'B64'
         opts[f'{ceph_vfs}:fscrypt'] = 'keybridge'
