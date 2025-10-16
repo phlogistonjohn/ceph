@@ -113,8 +113,16 @@ echo -e "\
     PRERELEASE_USERNAME=${PRERELEASE_USERNAME}\n
     PRERELEASE_PASSWORD=${PRERELEASE_PASSWORD}\n " > prerelease.secret.txt
 
+if [ -z "$FROM_IMAGE" ] ; then
+    case "$CFILE" in
+        *.el10) FROM_IMAGE="docker.io/rockylinux/rockylinux:10" ;;
+        *) FROM_IMAGE="quay.io/centos/centos:stream9" ;;
+    esac
+    echo "Using base image: $FROM_IMAGE"
+fi
+
 podman build --pull=newer --squash -f $CFILE -t build.sh.output \
-    --build-arg FROM_IMAGE=${FROM_IMAGE:-quay.io/centos/centos:stream9} \
+    --build-arg FROM_IMAGE=${FROM_IMAGE} \
     --build-arg CEPH_SHA1=${CEPH_SHA1} \
     --build-arg CEPH_GIT_REPO=${CEPH_GIT_REPO} \
     --build-arg CEPH_REF=${BRANCH:-main} \
