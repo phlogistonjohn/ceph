@@ -131,7 +131,8 @@ def task(ctx, config):
                         subdir=config.get('subdir'),
                         timeout=timeout,
                         cleanup=cleanup,
-                        coverage_and_limits=not config.get('no_coverage_and_limits', None))
+                        custom_git_url=config.get('custom_git_url'),
+                        coverage_and_limits=False)
 
     if cleanup:
         # Clean up dirs from any non-all workunits
@@ -143,7 +144,9 @@ def task(ctx, config):
         all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('basedir', 'qa/workunits'),
-                              config.get('subdir'), timeout=timeout,
+                              config.get('subdir'),
+                              custom_git_url=config.get('custom_git_url'),
+                              timeout=timeout,
                               cleanup=cleanup)
 
 
@@ -272,7 +275,7 @@ def _make_scratch_dir(ctx, role, subdir):
     return created_mountpoint
 
 
-def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None, cleanup=True):
+def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None, cleanup=True, custom_git_url=None):
     """
     Make a scratch directory for each client in the cluster, and then for each
     test spawn _run_tests() for each role.
@@ -294,6 +297,7 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
                 p.spawn(_run_tests, ctx, refspec, role, [unit], env,
                         basedir,
                         subdir,
+                        custom_git_url=custom_git_url,
                         timeout=timeout)
 
     # cleanup the generated client directories
@@ -304,7 +308,7 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
 
 def _run_tests(ctx, refspec, role, tests, env, basedir,
                subdir=None, timeout=None, cleanup=True,
-               coverage_and_limits=True):
+               coverage_and_limits=False, custom_git_url=None):
     """
     Run the individual test. Create a scratch directory and then extract the
     workunits from git. Make the executables, and then run the tests.
@@ -340,24 +344,32 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
     git_url = teuth_config.get_ceph_qa_suite_git_url()
     # if we are running an upgrade test, and ceph-ci does not have branches like
     # `jewel`, so should use ceph.git as an alternative.
-    try:
-        remote.run(logger=log.getChild(role),
-                   args=refspec.clone(git_url, clonedir))
-    except CommandFailedError:
-        if git_url.endswith('/ceph-ci.git'):
-            alt_git_url = git_url.replace('/ceph-ci.git', '/ceph.git')
-        elif git_url.endswith('/ceph-ci'):
-            alt_git_url = re.sub(r'/ceph-ci$', '/ceph.git', git_url)
-        else:
-            raise
+    urls = [git_url]
+    if custom_git_url:
+        log.info('Custom git URL: %r', custom_git_url)
+        urls.append(custom_git_url)
+    if git_url.endswith('/ceph-ci.git'):
+        urls.append(git_url.replace('/ceph-ci.git', '/ceph.git'))
+    elif git_url.endswith('/ceph-ci'):
+        urls.append(re.sub(r'/ceph-ci$', '/ceph.git', git_url))
+    cloned = False
+    for url in urls:
+        try:
+            remote.run(
+                logger=log.getChild(role),
+                args=refspec.clone(url, clonedir),
+            )
+            cloned = True
+            break
+        except CommandFailedError:
+            log.info("failed to check out '%s' from %s", refspec, url)
+    if not cloned:
         log.info(
-            "failed to check out '%s' from %s; will also try in %s",
+            "failed to check out '%s' from all possible urls: %r",
             refspec,
-            git_url,
-            alt_git_url,
+            urls
         )
-        remote.run(logger=log.getChild(role),
-                   args=refspec.clone(alt_git_url, clonedir))
+
     remote.run(
         logger=log.getChild(role),
         args=[
