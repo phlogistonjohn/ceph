@@ -533,6 +533,11 @@ class Cluster(_RBase):
     # configure a remote control sidecar server.
     remote_control: Optional[RemoteControl] = None
 
+    # HACK HACK HACK
+    exo_fsid: str = ''
+    exo_mons: str = ''
+    exo_keys: Optional[Dict[str, str]] = None
+
     def validate(self) -> None:
         if not self.cluster_id:
             raise ValueError('cluster_id requires a value')
