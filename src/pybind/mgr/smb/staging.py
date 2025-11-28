@@ -342,18 +342,24 @@ def _check_share_resource(
             status={"cluster_id": share.cluster_id},
         )
     assert share.cephfs is not None
-    try:
-        volpath = path_resolver.resolve_exists(
-            share.cephfs.volume,
-            share.cephfs.subvolumegroup,
-            share.cephfs.subvolume,
-            share.cephfs.path,
-        )
-    except (FileNotFoundError, NotADirectoryError):
-        raise ErrorResult(
-            share, msg="path is not a valid directory in volume"
-        )
-    if earmark_resolver:
+    cluster = staging.get_cluster(share.cluster_id)
+    exo = bool(cluster.exo_fsid)
+
+    if exo:
+        volpath = share.cephfs.path
+    else:
+        try:
+            volpath = path_resolver.resolve_exists(
+                share.cephfs.volume,
+                share.cephfs.subvolumegroup,
+                share.cephfs.subvolume,
+                share.cephfs.path,
+            )
+        except (FileNotFoundError, NotADirectoryError):
+            raise ErrorResult(
+                share, msg="path is not a valid directory in volume"
+            )
+    if earmark_resolver and not exo:
         earmark = earmark_resolver.get_earmark(
             volpath,
             share.cephfs.volume,
