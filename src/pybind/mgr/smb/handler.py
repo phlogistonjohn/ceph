@@ -16,7 +16,7 @@ import contextlib
 import logging
 import time
 
-from ceph.deployment.service_spec import SMBSpec
+from ceph.deployment.service_spec import CustomConfig, SMBSpec
 
 from . import config_store, external, resources
 from .enums import (
@@ -115,6 +115,20 @@ class _FakePathResolver:
             subvolumegroup = subvolumegroup or '_nogroup'
             return f'/volumes/{subvolumegroup}/{subvolume}/{vid}/{path}'
         return f'/{path}'
+
+    resolve_exists = resolve
+
+
+class ExoResolver:
+    def __init__(self, cluster: resources.Cluster) -> None:
+        self._cluster = cluster
+
+    def resolve(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> str:
+        assert not subvolumegroup
+        assert not subvolume
+        return path
 
     resolve_exists = resolve
 
@@ -681,7 +695,10 @@ def order_resources(
 
 
 def _generate_share(
-    share: resources.Share, resolver: PathResolver, cephx_entity: str
+    share: resources.Share,
+    resolver: PathResolver,
+    cephx_entity: str,
+    exo: bool = False,
 ) -> Dict[str, Dict[str, str]]:
     cephfs = share.checked_cephfs
     assert cephfs.provider.is_vfs(), "not a vfs provider"
@@ -707,13 +724,16 @@ def _generate_share(
         }[cephfs.provider.expand()]
     except KeyError:
         raise ValueError(f'unsupported provider: {cephfs.provider}')
+    ceph_config_file = (
+        '/etc/ceph/exo.ceph.conf' if exo else '/etc/ceph/ceph.conf'
+    )
     cfg = {
         # smb.conf options
         'options': {
             'path': path,
             "vfs objects": f"acl_xattr ceph_snapshots {ceph_vfs}",
             'acl_xattr:security_acl_name': 'user.NTACL',
-            f'{ceph_vfs}:config_file': '/etc/ceph/ceph.conf',
+            f'{ceph_vfs}:config_file': ceph_config_file,
             f'{ceph_vfs}:filesystem': cephfs.volume,
             f'{ceph_vfs}:user_id': cephx_entity,
             'read only': ynbool(share.readonly),
@@ -796,8 +816,12 @@ def _generate_config(
         cluster_global_opts['idmap config * : range'] = '2000-9999999'
     cluster_global_opts['smb ports'] = str(_smb_port(cluster))
 
+    exo = bool(cluster.exo_fsid)
+    resolver = ExoResolver(cluster) if exo else resolver
+    if cluster.exo_keys:
+        cephx_entity = list(cluster.exo_keys.keys())[0]
     share_configs = {
-        share.name: _generate_share(share, resolver, cephx_entity)
+        share.name: _generate_share(share, resolver, cephx_entity, exo=exo)
         for share in shares
     }
 
@@ -890,6 +914,28 @@ def _generate_smb_service_spec(
         rc_ca_cert = _tls_uri(
             cluster.remote_control.ca_cert, tls_credential_entries
         )
+    custom_configs = None
+    if cluster.exo_fsid:
+        assert cluster.exo_mons
+        assert cluster.exo_keys
+        conf_txt = '\n'.join(
+            (
+                '[global]',
+                f'fsid = {cluster.exo_fsid}',
+                f'mon_host = {cluster.exo_mons}',
+            )
+        )
+        keys_txt = '\n'.join(
+            [
+                f'[{key_name}]\nkey = {key_val}'
+                for key_name, key_val in cluster.exo_keys.items()
+            ]
+        )
+        custom_configs = [
+            CustomConfig(conf_txt, mount_path='/etc/ceph/exo.ceph.conf'),
+            CustomConfig(keys_txt, mount_path='/etc/ceph/exo.ceph.keyring'),
+        ]
+
     return SMBSpec(
         service_id=cluster.cluster_id,
         placement=cluster.placement,
@@ -906,6 +952,7 @@ def _generate_smb_service_spec(
         remote_control_ssl_cert=rc_cert,
         remote_control_ssl_key=rc_key,
         remote_control_ca_cert=rc_ca_cert,
+        custom_configs=custom_configs,
     )
 
 
