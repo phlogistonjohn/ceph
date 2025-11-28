@@ -573,6 +573,8 @@ class Cluster(_RBase):
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
         rc.on_construction_error(InvalidResourceError.wrap)
+        rc.exo_fsid.quiet = True
+        rc.exo_mons.quiet = True
         return rc
 
     @property
