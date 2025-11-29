@@ -923,11 +923,12 @@ def _generate_smb_service_spec(
                 '[global]',
                 f'fsid = {cluster.exo_fsid}',
                 f'mon_host = {cluster.exo_mons}',
+                ''
             )
         )
         keys_txt = '\n'.join(
             [
-                f'[{key_name}]\nkey = {key_val}'
+                f'[{key_name}]\nkey = {key_val}\n'
                 for key_name, key_val in cluster.exo_keys.items()
             ]
         )
