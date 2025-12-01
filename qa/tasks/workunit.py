@@ -17,6 +17,9 @@ from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
+XU = 'https://github.com/phlogistonjohn/ceph'
+
+
 def task(ctx, config):
     """
     Run ceph on all workunits found under the specified path.
@@ -131,7 +134,7 @@ def task(ctx, config):
                         subdir=config.get('subdir'),
                         timeout=timeout,
                         cleanup=cleanup,
-                        custom_git_url=config.get('custom_git_url'),
+                        custom_git_url=config.get('custom_git_url', XU),
                         coverage_and_limits=False)
 
     if cleanup:
@@ -145,7 +148,7 @@ def task(ctx, config):
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('basedir', 'qa/workunits'),
                               config.get('subdir'),
-                              custom_git_url=config.get('custom_git_url'),
+                              custom_git_url=config.get('custom_git_url', XU),
                               timeout=timeout,
                               cleanup=cleanup)
 
