@@ -135,7 +135,8 @@ def task(ctx, config):
                         timeout=timeout,
                         cleanup=cleanup,
                         custom_git_url=config.get('custom_git_url', XU),
-                        coverage_and_limits=False)
+                        coverage_and_limits=not config.get('no_coverage_and_limits', None))
+
 
     if cleanup:
         # Clean up dirs from any non-all workunits
