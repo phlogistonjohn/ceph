@@ -1,4 +1,5 @@
 import errno
+import hashlib
 import ipaddress
 import logging
 from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union
@@ -426,6 +427,28 @@ class SMBService(CephService):
             )
         return ip
 
+    @classmethod
+    def get_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
+        # to be very explicit the smb service will namespace all
+        # "dependencies" that are not other services (inspired by but
+        # more strict than what nfs does):
+        # "smb+meta:{name}={value}" for processed deps made up of hashed values
+        # from one or more fields
+        # "smb+field:{field_name}={value}" for simple deps derived from
+        # one spec field
+        if not spec:
+            return []
+        out = []
+        for ccc in spec.ceph_cluster_configs or []:
+            value = _hash_ceph_cluster_config(ccc)
+            out.append(f'smb+meta:ceph_cluster_config.{ccc.alias}={value}')
+        return out
+
 
 Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
@@ -469,3 +492,11 @@ def _to_keyring(ext_cluster: SMBExternalCephCluster) -> str:
             '',
         ]
     )
+
+
+def _hash_ceph_cluster_config(spec: SMBExternalCephCluster) -> str:
+    _fields = ['alias', 'fsid', 'mon_host', 'user', 'key']
+    fdg = hashlib.sha256()
+    for field_name in _fields:
+        fdg.update(getattr(spec, field_name, '').encode())
+    return f'sha256:{fdg.hexdigest()}'
