@@ -539,6 +539,9 @@ function init_fork_remote {
 }
 
 function init_github_token {
+    if [ "${USE_KEYRING}" -a "${github_token}" ]; then
+        return 0
+    fi
     github_token="$(from_file github_token)"
     if [ "$github_token" ] ; then
         true
@@ -549,6 +552,9 @@ function init_github_token {
 }
 
 function init_redmine_key {
+    if [ "${USE_KEYRING}" -a "${redmine_key}" ]; then
+        return 0
+    fi
     redmine_key="$(from_file redmine_key)"
     if [ "$redmine_key" ] ; then
         true
@@ -1369,6 +1375,26 @@ function warning {
     log warning "$@"
 }
 
+function load_from_keyring {
+    if ! keyring -h > /dev/null ; then
+        echo WARNING: keyring not available
+        return
+    fi
+    local k_github=${KEYRING_KEY_GH:-github.com:classic}
+    local k_redmine=${KEYRING_KEY_TRACKER:-tracker.ceph.com}
+    github_token="$(keyring get "${USE_KEYRING}" "${k_github}")"
+    redmine_key="$(keyring get "${USE_KEYRING}" "${k_redmine}")"
+
+    if [ -z "${github_token}" -o -z "${redmine_key}" ]; then
+        echo "ERROR: USE_KEYRING was set but github token or redmine key"
+        echo "was missing. To use the keyring, populate your keyring"
+        echo "using the following commands:"
+        echo ""
+        echo "> keyring set ${USE_KEYRING} ${k_github}"
+        echo "> keyring set ${USE_KEYRING} ${k_redmine}"
+        exit 1
+    fi
+}
 
 #
 # are we in a local git clone?
@@ -1407,6 +1433,10 @@ fi
 #
 # process command-line arguments
 #
+
+if [ "$USE_KEYRING" ]; then
+    load_from_keyring
+fi
 
 munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,existing-pr:,force,fork:,help,milestones,prepare,setup,setup-report,troubleshooting,update-version,usage,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
