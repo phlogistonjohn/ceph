@@ -37,6 +37,8 @@ log = logging.getLogger(__name__)
 
 
 def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
+    if 'stdin' in kwargs:
+        log.info('STDIN IS [[[%s]]]', kwargs['stdin'])
     teuthology.get_testdir(ctx)
     return remote.run(
         args=[
