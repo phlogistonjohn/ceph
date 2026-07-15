@@ -16,10 +16,12 @@ Key Features:
 supported top-level scopes.
 """
 
+import base64
 import sys
 import errno
 import enum
 import logging
+import uuid
 
 from typing import (
     Any,
@@ -49,6 +51,7 @@ XATTR_SUBVOLUME_EARMARK_NAME = 'user.ceph.subvolume.earmark'
 
 
 class EarmarkTopScope(enum.Enum):
+    MIXED = "mixed"
     NFS = "nfs"
     SMB = "smb"
 
@@ -252,9 +255,219 @@ class SMBEarmark(NamedTuple):
         )
 
 
+class Proto(enum.Enum):
+    NFS = 'nfs'
+    SMB = 'smb'
+
+
+class PseduoUSSID(enum.Enum):
+    NEW = 'NEW'
+    ANY = 'ANY'
+
+
+class EarmarkVersion(NamedTuple):
+    version: int
+    level: str
+    revision: int
+
+    def __str__(self) -> str:
+        return f'v{self.version}{self.level}{self.revision}'
+
+    @classmethod
+    def parse(cls, value: str) -> Self:
+        if value[0] != 'v':
+            raise EarmarkParseError(
+                f'invalid version: {value!r}: missing prefix'
+            )
+        rest = value[1:]
+        pos = -1
+        for sep in ('a', 'b', 'r'):
+            pos = rest.find(sep)
+            if pos > 0:
+                break
+        if pos < 0:
+            raise EarmarkParseError(
+                f'invalid version: {value!r}: missing level'
+            )
+        v, l, r = rest[:pos], rest[pos], rest[pos + 1 :]
+        if not v.isdigit():
+            raise EarmarkParseError(
+                f'invalid version: {value!r}: invalid version number'
+            )
+        if not r.isdigit():
+            raise EarmarkParseError(
+                f'invalid version: {value!r}: invalid revision number'
+            )
+        ev = cls(int(v), l, int(r))
+        try:
+            ev.check()
+        except ValueError as err:
+            raise EarmarkParseError(f'invalid version: {value!r}: {err}')
+        return ev
+
+    def check(self):
+        if not (isinstance(self.version, int) and self.version >= 0):
+            raise ValueError("invalid version number")
+        if not (isinstance(self.revision, int) and self.revision >= 0):
+            raise ValueError("invalid revision number")
+        if self.level not in ('a', 'b', 'r'):
+            raise ValueError("invalid level")
+
+
+class MixedProtoEarmark(NamedTuple):
+    top: EarmarkTopScope
+    version: EarmarkVersion
+    protos: Tuple[Proto]
+    ussid: Union[uuid.UUID, PseduoUSSID]
+
+    def _version_str(self) -> str:
+        return str(self.version)
+
+    def _protos_str(self) -> str:
+        return '_'.join(sorted(p.value for p in self.protos))
+
+    def _ussid_str(self) -> str:
+        if isinstance(self.ussid, PseduoUSSID):
+            return self.ussid.value
+        return base64.b64encode(self.ussid.bytes, _B64ALT)[:-2].decode()
+
+    @property
+    def subsections(self) -> List[str]:
+        """Return earmark subsections as a list of strings."""
+        return [self._version_str(), self._protos_str(), self._ussid_str()]
+
+    def __str__(self) -> str:
+        out = [self.top.value] + self.subsections
+        assert not any('.' in p for p in out)
+        return '.'.join(out)
+
+    @classmethod
+    def parse(cls, value: str) -> Self:
+        """Given an earmark string, return a new SMBEarmark object or raise an
+        EarmarkParseError if the string is not a valid smb earmark.
+        """
+        cid = ''
+        parts = value.split('.')
+        if parts[0] != EarmarkTopScope.MIXED.value:
+            raise EarmarkParseError(
+                f'wrong top scope for mixed earmark: {value!r}'
+            )
+        if len(parts) < 2:
+            raise EarmarkParseError(
+                f'missing version in mixed earmark: {value!r}'
+            )
+        version = EarmarkVersion.parse(parts[1])
+        if len(parts) < 4:
+            raise EarmarkParseError(
+                f'missing subsections in mixed earmark: {value!r}'
+            )
+        protos = [Proto(p) for p in parts[2].split('_')]
+        if parts[3] in (PseduoUSSID.NEW.value, PseduoUSSID.ANY.value):
+            ussid = PseduoUSSID(parts[3])
+        else:
+            bss = parts[3].encode() + b'=='
+            try:
+                ussid = uuid.UUID(bytes=base64.b64decode(bss, _B64ALT))
+            except ValueError:
+                raise EarmarkParseError(
+                    f'invalid ussid in mixed earmark: {value!r}'
+                )
+        mpe = cls(EarmarkTopScope.MIXED, version, protos, ussid)
+        try:
+            mpe.check()
+        except ValueError as err:
+            raise EarmarkParseError(str(err))
+        return mpe
+
+    @classmethod
+    def from_ussid(
+        cls,
+        ussid: Union[uuid.UUID, PseduoUSSID],
+        protos: Optional[Tuple[Proto]] = None,
+    ) -> Self:
+        """Given an smb cluster_id, return a new SMBEarmark object."""
+        if not protos:
+            protos = (Proto.NFS, Proto.SMB)
+        mpe = cls(EarmarkTopScope.MIXED, _known_versions[-1], protos, ussid)
+        mpe.check()
+        return mpe
+
+    def check_version(self) -> None:
+        if self.version not in _known_versions:
+            raise ValueError('unknown version')
+
+    def check_protos(self) -> None:
+        for _proto in self.protos:
+            if _proto not in Proto:
+                raise ValueError(f'invalid protocol value: {_proto}')
+        if list(self.protos) != sorted(self.protos, key=lambda p: p.value):
+            raise ValueError('incorrect proto ordering')
+
+    def check(self) -> None:
+        self.check_version()
+        self.check_protos()
+
+    def __eq__(self, other: Any) -> bool:
+        """Equality check."""
+        if isinstance(other, str):
+            try:
+                _other = self.parse(other)
+            except EarmarkParseError:
+                return False
+        elif isinstance(other, self.__class__):
+            _other = other
+        else:
+            return NotImplemented
+        return (
+            self.top is _other.top
+            and self.version == _other.version
+            and self.protos == _other.protos
+            and self.ussid == _other.ussid
+        )
+
+    def upgrades(self, current: EarmarkContents) -> bool:
+        """Returns true if this earmark can be used to upgrade the current
+        earmark value applied to some path.
+        """
+        # TODO: allow upgrading "smb" earmarks (no cluster assigned) and nfs
+        # earmarks ?
+        if self.top != current.top:
+            raise EarmarkConflictError(
+                f'earmark has already been set by {current.top.value}',
+                current,
+                self,
+            )
+        ce = cast(MixedProtoEarmark, current)
+        # version check
+        if self.version < current.version:
+            raise EarmarkConflictError(
+                f'can not downgrade earmark', current, self
+            )
+        if self.protos != current.protos:
+            raise EarmarkConflictError(
+                f'can not change protocols for current earmark', current, self
+            )
+        if self.ussid is PseduoUSSID.NEW:
+            return True
+        raise EarmarkConflictError(
+            f'earmark has already been assigned a unique security settings ID',
+            current,
+            self,
+        )
+
+
+_B64ALT = b'-_'
+
+_proto_versions: Dict[Proto, EarmarkVersion] = {
+    Proto.NFS: EarmarkVersion(0, "a", 0),
+    Proto.SMB: EarmarkVersion(0, "a", 0),
+}
+_known_versions: List[EarmarkVersion] = [EarmarkVersion(0, 'a', 0)]
+
 _earmark_types: Dict[EarmarkTopScope, Type[EarmarkContents]] = {
     EarmarkTopScope.NFS: NFSEarmark,
     EarmarkTopScope.SMB: SMBEarmark,
+    EarmarkTopScope.MIXED: MixedProtoEarmark,
 }
 
 
