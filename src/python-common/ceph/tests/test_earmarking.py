@@ -1,7 +1,9 @@
 import pytest
 import errno
+import uuid
 from unittest import mock
 
+from ceph.fs import earmarking
 from ceph.fs.earmarking import (
     CephFSVolumeEarmarking,
     EarmarkException,
@@ -83,3 +85,94 @@ class TestCephFSVolumeEarmarking:
         with mock.patch.object(earmarking, 'set_earmark') as mock_set_earmark:
             earmarking.clear_earmark()
             mock_set_earmark.assert_called_once_with("")
+
+
+@pytest.mark.parametrize(('e', 'err'), [
+    ('mixed.v0a0.nfs_smb.NEW', None),
+    ('mixed.v0a0.nfs_smb.ANY', None),
+    ('mixed.v0a0.nfs_smb.ERERESIiMzNERFVVZneImQ', None),
+    ('mixed.v0a0.nfs.ERERESIiMzNERFVVZneImQ', None),
+    ('mixed.v0a0.smb.ERERESIiMzNERFVVZneImQ', None),
+    ('mixed.v0a2.nfs_smb.ERERESIiMzNERFVVZneImQ', None),
+    ('mixed', 'missing version'),
+    ('mixed.bob.y.y', 'invalid version'),
+    ('mixed.v0a0', 'missing subsection'),
+    ('mixed.v0a0.asdf', 'missing subsection'),
+    ('mixed.v0a0.asdf.money', 'not a valid Proto'),
+    ('mixed.v0a0.nfs.money', 'invalid ussid'),
+    ('mixed.v999a999.nfs_smb.ANY', 'unknown version'),
+])
+def test_parse_mixed_proto_earmark(e, err):
+    known_versions = [
+        earmarking.EarmarkVersion(0, 'a', 0),
+        earmarking.EarmarkVersion(0, 'a', 1),
+        earmarking.EarmarkVersion(0, 'a', 2),
+    ]
+    try:
+        orig = earmarking._known_versions
+        earmarking._known_versions = known_versions
+        if err:
+            with pytest.raises(Exception, match=err):
+                parse_earmark(e)
+        else:
+            mpe = parse_earmark(e)
+            assert str(mpe) == e, "stringify round trip failed"
+    finally:
+        earmarking._known_versions = orig
+
+
+def test_parse_mixed_proto_earmark_wrong_top():
+    with pytest.raises(earmarking.EarmarkParseError, match='top'):
+        earmarking.MixedProtoEarmark.parse(
+            'smb.cluster.foo'
+        )
+
+
+@pytest.mark.parametrize(
+    ('params', 'conv'),
+    [
+        (
+            ([uuid.UUID('b239139a-e19c-46bb-80b9-e19b24d8e2f3')], {}),
+            'mixed.v0b99.nfs_smb.sjkTmuGcRruAueGbJNji8w',
+        ),
+        (
+            ([earmarking.PseduoUSSID.ANY], {}),
+            'mixed.v0b99.nfs_smb.ANY',
+        ),
+        (
+            ([earmarking.PseduoUSSID.NEW], {}),
+            'mixed.v0b99.nfs_smb.NEW',
+        ),
+        (
+            (
+                [uuid.UUID('b239139a-e19c-46bb-80b9-e19b24d8e2f3')],
+                {'protos': (earmarking.Proto.SMB,)},
+            ),
+            'mixed.v0b99.smb.sjkTmuGcRruAueGbJNji8w',
+        ),
+        (
+            (
+                [uuid.UUID('b239139a-e19c-46bb-80b9-e19b24d8e2f3')],
+                {'protos': (earmarking.Proto.NFS,)},
+            ),
+            'mixed.v0b99.nfs.sjkTmuGcRruAueGbJNji8w',
+        ),
+    ],
+)
+def test_build_mixed_proto_earmark_vals(params, conv):
+    args, kwargs = params
+    known_versions = [
+        earmarking.EarmarkVersion(0, 'a', 0),
+        earmarking.EarmarkVersion(0, 'a', 1),
+        earmarking.EarmarkVersion(0, 'a', 2),
+        earmarking.EarmarkVersion(0, 'b', 99),
+    ]
+    try:
+        orig = earmarking._known_versions
+        earmarking._known_versions = known_versions
+        assert (
+            str(earmarking.MixedProtoEarmark.from_ussid(*args, **kwargs))
+            == conv
+        )
+    finally:
+        earmarking._known_versions = orig
