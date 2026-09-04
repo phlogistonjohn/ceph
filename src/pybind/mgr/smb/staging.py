@@ -19,6 +19,7 @@ from ceph.fs.earmarking import EarmarkTopScope
 from . import config_store, resources, rgw
 from .enums import (
     AuthMode,
+    CaseInsensitiveCheckPolicy,
     ConfigNS,
     Intent,
     JoinSourceType,
@@ -567,6 +568,7 @@ def _check_share_cephfs(
                     msg="earmark has already been set by smb cluster "
                     f"{parsed_earmark['cluster_id']}",
                 )
+    _check_case_sensitivity_settings(share, toolbox)
 
     name_used_by = _share_name_in_use(staging, share)
     if name_used_by:
@@ -642,6 +644,43 @@ def _check_fscrypt_scopes(share: resources.Share, staging: Staging) -> None:
                 'cluster_id': share.cluster_id,
             },
         )
+
+
+def _check_case_sensitivity_settings(share: resources.Share, toolbox: CrossCheckToolbox) -> None:
+    policy = share.case_insensitive or CaseInsensitiveCheckPolicy.WARN
+    if policy is CaseInsensitiveCheckPolicy.IGNORE:
+        return
+    assert share.cephfs
+    if not hasattr(toolbox.path_resolver, 'resolve_case_sensitivity', None):
+        log.warning('Path resolver lacks resolve_case_sensitivity method')
+        raise ErrorResult(
+            share,
+            msg='Unable to check case sensitivity settings for subvolume',
+        )
+    cspr = cast(PathCaseSensitivityResolver, toolbox.path_resolver)
+    found, sensitive = cspr.resolve_case_sensitivity(
+        share.cephfs.volume,
+        share.cephfs.subvolumegroup,
+        share.cephfs.subvolume,
+        share.cephfs.path,
+    )
+    if not sensitive:
+        log.debug('subvolume %s:%s:%s:%s is not case sensitive',
+            share.cephfs.volume,
+            share.cephfs.subvolumegroup,
+            share.cephfs.subvolume,
+            share.cephfs.path,
+        )
+        return
+    # TODO: warn as warning
+    desc = {
+        True: 'is configured to be case sensitive',
+        False: 'is case sensitive',
+    }[found]
+    raise ErrorResult(
+        share,
+        msg=f'CephFS subvolume {desc}; case insensitive mode is required',
+    )
 
 
 @cross_check_resource.register
