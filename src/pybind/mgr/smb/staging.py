@@ -226,10 +226,7 @@ class CrossCheckToolbox:
 
 @functools.singledispatch
 def cross_check_resource(
-    resource: SMBResource,
-    staging: Staging,
-    *,
-    toolbox: CrossCheckToolbox
+    resource: SMBResource, staging: Staging, *, toolbox: CrossCheckToolbox
 ) -> None:
     """Check a given resource for consistency across the set of other resources
     in the virtual transaction represented by the staging store and
@@ -646,7 +643,9 @@ def _check_fscrypt_scopes(share: resources.Share, staging: Staging) -> None:
         )
 
 
-def _check_case_sensitivity_settings(share: resources.Share, toolbox: CrossCheckToolbox) -> None:
+def _check_case_sensitivity_settings(
+    share: resources.Share, toolbox: CrossCheckToolbox
+) -> None:
     policy = share.case_insensitive or CaseInsensitiveCheckPolicy.WARN
     if policy is CaseInsensitiveCheckPolicy.IGNORE:
         return
@@ -665,7 +664,8 @@ def _check_case_sensitivity_settings(share: resources.Share, toolbox: CrossCheck
         share.cephfs.path,
     )
     if not sensitive:
-        log.debug('subvolume %s:%s:%s:%s is not case sensitive',
+        log.debug(
+            'subvolume %s:%s:%s:%s is not case sensitive',
             share.cephfs.volume,
             share.cephfs.subvolumegroup,
             share.cephfs.subvolume,
