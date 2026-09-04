@@ -149,7 +149,7 @@ class CephFSPathResolver:
         found = False
         sens = True  # by default cephfs is case sensitive
         with self._open(volume, subvolumegroup, subvolume, path) as fsh:
-            bpath = fsh.fs.volpath.encode('utf-8')
+            bpath = fsh.volpath.encode('utf-8')
             try:
                 xvalue = fsh.fs.getxattr(bpath, xattr_name)
                 found = True
