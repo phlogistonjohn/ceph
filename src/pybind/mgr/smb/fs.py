@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Iterator
 
 import contextlib
 import logging
@@ -132,7 +132,7 @@ class CephFSPathResolver:
         sharable directory. May raise FileNotFoundError or NotADirectoryError
         when the path is not valid.
         """
-        def self._open(volume, subvolumegroup, subvolume, path) as fsh:
+        with self._open(volume, subvolumegroup, subvolume, path) as fsh:
             volpath = fsh.volpath
         log.debug('Verified that %r exists in %r', volpath, volume)
         return volpath
@@ -146,12 +146,17 @@ class CephFSPathResolver:
         indicates case sensitive is set if True.
         """
         xattr_name = b'ceph.dir.casesensitive'
-        def self._open(volume, subvolumegroup, subvolume, path) as fsh:
-            log.debug('Verified that %r exists in %r', volpath, volume)
-        return volpath
-            maxbytes = int(self.fs.getxattr(path,
-                                            'ceph.quota.max_bytes'
-                                            ).decode('utf-8'))
+        found = False
+        sens = True  # by default cephfs is case sensitive
+        with self._open(volume, subvolumegroup, subvolume, path) as fsh:
+            bpath = fsh.fs.volpath.encode('utf-8')
+            try:
+                xvalue = fsh.fs.getxattr(bpath, xattr_name)
+                found = True
+                sens = xvalue == b'1'
+            except (cephfs.ObjectNotFound, cephfs.NoData, OSError):
+                pass
+        return found, sens
 
 
 class _TTLCache:
