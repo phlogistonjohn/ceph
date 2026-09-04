@@ -193,7 +193,6 @@ class KeyBridgePeerPolicy(_StrEnum):
     UNRESTRICTED = 'unrestricted'
 
 
-
 class CaseInsensitiveCheckPolicy(_StrEnum):
     """Specify how we should check for the underlying CephFS subvolumes having
     (or not having) case sensitivity disabled.
