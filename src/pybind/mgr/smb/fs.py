@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Iterator
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import contextlib
 import logging
