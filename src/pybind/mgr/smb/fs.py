@@ -145,7 +145,7 @@ class CephFSPathResolver:
         iff case sensitive metadata (xattr) is found. The second bool
         indicates case sensitive is set if True.
         """
-        xattr_name = b'ceph.
+        xattr_name = b'ceph.dir.casesensitive'
         def self._open(volume, subvolumegroup, subvolume, path) as fsh:
             log.debug('Verified that %r exists in %r', volpath, volume)
         return volpath
