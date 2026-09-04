@@ -29,6 +29,7 @@ from object_format import ErrorResponseBase
 from . import resourcelib, validation
 from .enums import (
     AuthMode,
+    CaseInsensitiveCheckPolicy,
     CephFSStorageProvider,
     ClientSupportMode,
     HostAccess,
