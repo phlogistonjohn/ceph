@@ -1,6 +1,6 @@
-import pytest
-
 import dataclasses
+
+import pytest
 
 import smb.resourcelib
 import smb.resources
