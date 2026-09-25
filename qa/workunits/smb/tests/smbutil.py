@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import enum
 import functools
 import os
 import pathlib
@@ -9,6 +10,10 @@ import cephutil
 
 import smbclient
 from smbprotocol.header import NtStatus
+import smbprotocol.open
+import smbprotocol.file_info
+import smbprotocol.security_descriptor
+import smbprotocol.tree
 
 
 class SMBTestHost:
@@ -108,15 +113,28 @@ def connection(conf, share, username=None, password=None):
     username = conf.username if username is None else username
     password = conf.password if password is None else password
 
-    smbclient.register_session(
+    session = smbclient.register_session(
         server=server,
         port=port,
         username=username,
         password=password,
     )
+
+    # monkey patch
+    acl_revision_cls = smbprotocol.security_descriptor.AclRevision
+    r3 = None
+    for attr in vars(acl_revision_cls):
+        if attr.startswith('_'):
+            continue
+        if getattr(acl_revision_cls, attr, None) == 3:
+            r3 = attr
+    if not r3:
+        r3 = 'ACL_REVISION_SAMBA'
+        setattr(acl_revision_cls, r3, 3)
+
     try:
         spath = pathlib.PureWindowsPath(f'//{server}/{share}')
-        yield PathWrapper(spath)
+        yield PathWrapper(spath, session=session)
     finally:
         smbclient.delete_session(server, port)
 
@@ -126,11 +144,20 @@ class PathWrapper:
     similarly to a pathlib.Path.
     """
 
-    def __init__(self, share_path):
+    def __init__(self, share_path, *, session, root=None):
         self.share_path = share_path
+        self._session = session
+        self._root = str(root if root else share_path)
+
+    def _child(self, sub):
+        return self.__class__(sub, session=self._session, root=self._root)
 
     def __truediv__(self, other):
-        return self.__class__(self.share_path / other)
+        return self._child(self.share_path / other)
+
+    @property
+    def rel_path(self):
+        return self.share_path.relative_to(self._root)
 
     def listdir(self, **kwargs):
         """List directory contents."""
@@ -175,6 +202,250 @@ class PathWrapper:
     def unlink(self):
         """Unlink (remove) a file."""
         smbclient.remove(str(self.share_path))
+
+    def _tree_connect(self):
+        # sn = self._root.rsplit('\\', 1)[-1] or '\\'
+        sn = self._root
+        while sn[-1] == '\\':
+            sn = sn[:-1]
+        print('SN', sn)
+        for tc in self._session.tree_connect_table.values():
+            if sn in tc.share_name.lower():
+                return tc, True
+        tc = smbprotocol.tree.TreeConnect(self._session, sn)
+        tc.connect()
+        assert tc.tree_connect_id in self._session.tree_connect_table
+        return tc, False
+
+    def get_security_descriptor(self):
+        tc, _ = self._tree_connect()
+        _open = smbprotocol.open
+        x = str(self.rel_path)
+        if x == '.':
+            x = ''
+        with contextlib.closing(_open.Open(tc, x)) as opath:
+            opath.create(
+                impersonation_level=_open.ImpersonationLevel.Impersonation,
+                desired_access=_open.DirectoryAccessMask.READ_CONTROL,
+                file_attributes=0,
+                share_access=(
+                    _open.ShareAccess.FILE_SHARE_READ
+                    | _open.ShareAccess.FILE_SHARE_WRITE
+                ),
+                create_disposition=_open.CreateDisposition.FILE_OPEN,
+                create_options=0,
+            )
+            req = _open.SMB2QueryInfoRequest()
+            req['info_type'] = _open.InfoType.SMB2_0_INFO_SECURITY
+            req['file_id'] = opath.file_id
+            req["additional_information"] = (
+                _open.InfoAdditionalInformation.OWNER_SECURTIY_INFORMATION
+                | _open.InfoAdditionalInformation.GROUP_SECURITY_INFORMATION
+                | _open.InfoAdditionalInformation.DACL_SECURITY_INFORMATION
+            )
+            req["output_buffer_length"] = 65536
+
+            # Send request and receive response
+            _conn = tc.session.connection
+            request = _conn.send(
+                req, tc.session.session_id, tc.tree_connect_id
+            )
+            response = _conn.receive(request)
+
+            qr = _open.SMB2QueryInfoResponse()
+            qr.unpack(response["data"].get_value())
+
+            sd = smbprotocol.security_descriptor.SMB2CreateSDBuffer()
+            sd.unpack(qr["buffer"].get_value())
+
+        return SecurityDescriptor.load(sd)
+
+    def set_security_descriptor(self, sd):
+        tc, _ = self._tree_connect()
+        _open = smbprotocol.open
+        x = str(self.rel_path)
+        if x == '.':
+            x = ''
+
+        smb_sd = smbprotocol.security_descriptor.SMB2CreateSDBuffer()
+        assert not sd.owner, "not supported"
+        assert not sd.group, "not supported"
+        smb_sd["control"].set_flag(
+            smbprotocol.security_descriptor.SDControl.SELF_RELATIVE
+        )
+        smb_sd.set_dacl(sd.d_acl_to_protocol())
+
+        with contextlib.closing(_open.Open(tc, x)) as opath:
+            opath.create(
+                impersonation_level=_open.ImpersonationLevel.Impersonation,
+                desired_access=_open.DirectoryAccessMask.WRITE_DAC,
+                file_attributes=0,
+                share_access=(
+                    _open.ShareAccess.FILE_SHARE_READ
+                    | _open.ShareAccess.FILE_SHARE_WRITE
+                ),
+                create_disposition=_open.CreateDisposition.FILE_OPEN,
+                create_options=0,
+            )
+            req = _open.SMB2SetInfoRequest()
+            req['info_type'] = _open.InfoType.SMB2_0_INFO_SECURITY
+            req['file_id'] = opath.file_id
+            req["additional_information"] = (
+                _open.InfoAdditionalInformation.DACL_SECURITY_INFORMATION
+            )
+            req["buffer"] = smb_sd
+
+            # Send request and receive response
+            _conn = tc.session.connection
+            request = _conn.send(
+                req, tc.session.session_id, tc.tree_connect_id
+            )
+            response = _conn.receive(request)
+            print(response)
+        return
+
+
+
+
+
+class ACEType(enum.Enum):
+    ALLOW = 0x00
+    DENY = 0x01
+    AUDIT = 0x02
+
+class _flagsEnum(enum.Enum):
+    @classmethod
+    def parse(cls, value):
+        _flags = []
+        for flag in cls:
+            if flag.value & value == flag.value:
+                _flags.append(flag.name)
+        return _flags
+
+    @classmethod
+    def join(cls, value):
+        _flags = cls.parse(value)
+        if not _flags:
+            return '0'
+        return '|'.join(sorted(_flags))
+
+    def __or__(self, other):
+        if isinstance(other, _flagsEnum):
+            other = other.value
+        return self.value | int(other)
+
+
+class ACEFlags(enum.Enum):
+    OBJECT_INHERIT = 0x01
+    CONTAINER_INHERIT = 0x02
+    NO_PROPAGATE_INHERIT = 0x04
+    INHERIT_ONLY = 0x08
+    INHERITED_ACE = 0x10
+    VALID_INHERIT = 0x0f
+    SUCCESSFUL_ACCESS = 0x40
+    FAILED_ACCESS = 0x80
+
+
+class ShortACEFlags(_flagsEnum):
+    "Compatible with flags emitted by smbcacls"
+    OI = ACEFlags.OBJECT_INHERIT.value
+    CI = ACEFlags.CONTAINER_INHERIT.value
+    NP = ACEFlags.NO_PROPAGATE_INHERIT.value
+    IO = ACEFlags.INHERIT_ONLY.value
+    ID = ACEFlags.INHERITED_ACE.value
+    SA = ACEFlags.SUCCESSFUL_ACCESS.value
+    FA = ACEFlags.FAILED_ACCESS.value
+
+
+class AccessMask(_flagsEnum):
+    GENERIC_READ = 0x80000000
+    GENERIC_WRITE = 0x40000000
+    GENERIC_EXECUTE = 0x20000000
+    GENERIC_ALL = 0x10000000
+    MAXIMUM_ALLOWED = 0x02000000
+    ACCESS_SYSTEM_SECURITY = 0x01000000
+    SYNCHRONIZE = 0x00100000
+    WRITE_OWNER = 0x00080000
+    WRITE_DACL = 0x00040000
+    READ_CONTROL = 0x00020000
+    DELETE = 0x00010000
+
+    @classmethod
+    def join(cls, value):
+        full = 0x001f01ff
+        if full & value == full:
+            return 'FULL'
+        return super(AccessMask, cls).join(value)
+
+
+class ACE:
+    def __init__(self, *, ace_type, ace_flags, mask, sid):
+        self.ace_type = ace_type
+        self.ace_flags = ace_flags
+        self.mask = mask
+        self.sid = sid
+
+    @classmethod
+    def load(cls, smb_ace):
+        ace_type = ACEType(smb_ace["ace_type"].get_value())
+        ace_flags = smb_ace["ace_flags"].get_value()
+        mask = smb_ace["mask"].get_value()
+        sid = str(smb_ace["sid"])
+        return cls(ace_type=ace_type, ace_flags=ace_flags, mask=mask, sid=sid)
+
+    def __str__(self):
+        return (
+            f'{self.__class__.__name__}('
+            f'ace_type={self.ace_type!r},'
+            f' ace_flags={ShortACEFlags.join(self.ace_flags)},'
+            f' mask={AccessMask.join(self.mask)},'
+            f' sid={self.sid!r}'
+            ')'
+        )
+
+    __repr__ = __str__
+
+    def to_protocol(self):
+        if self.ace_type is ACEType.ALLOW:
+            ace = smbprotocol.security_descriptor.AccessAllowedAce()
+        else:
+            ace = smbprotocol.security_descriptor.AccessDeniedAce()
+        ace["ace_flags"] = int(self.ace_flags)
+        ace["mask"] = int(self.mask)
+        p_sid = smbprotocol.security_descriptor.SIDPacket()
+        p_sid.from_string(self.sid)
+        ace["sid"] = p_sid
+        return ace
+
+
+class SecurityDescriptor:
+    def __init__(self, *, owner, group, d_acl=None, s_acl=None):
+        self.owner = owner
+        self.group = group
+        self.d_acl = d_acl
+        self.s_acl = s_acl
+
+    @classmethod
+    def load(cls, smb_sd):
+        owner = str(smb_sd.get_owner())
+        group = str(smb_sd.get_group())
+        dacl = smb_sd.get_dacl()
+        unpacked_d_acl = [ACE.load(a) for a in dacl['aces']]
+        return cls(owner=owner, group=group, d_acl=unpacked_d_acl)
+
+    def __str__(self):
+        assert not self.s_acl
+        return (
+            f'{self.__class__.__name__}(owner={self.owner!r},'
+            f' group={self.group!r},'
+            f' d_acl={self.d_acl!r},'
+            '...)'
+        )
+
+    def d_acl_to_protocol(self):
+        acl = smbprotocol.security_descriptor.AclPacket()
+        acl["aces"] = [a.to_protocol() for a in self.d_acl]
+        return acl
 
 
 def _get_resources(smb_cfg, rtype):
