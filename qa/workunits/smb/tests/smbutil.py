@@ -203,6 +203,9 @@ class PathWrapper:
         """Unlink (remove) a file."""
         smbclient.remove(str(self.share_path))
 
+    def stat(self):
+        return smbclient.stat(str(self.share_path))
+
     def _tree_connect(self):
         # sn = self._root.rsplit('\\', 1)[-1] or '\\'
         sn = self._root
@@ -218,6 +221,21 @@ class PathWrapper:
         return tc, False
 
     def get_security_descriptor(self):
+        import smbclient.security
+
+        return smbclient.security.get_security_descriptor(
+            str(self.share_path)
+        )
+
+    def set_security_descriptor(self, sec_desc):
+        import smbclient.security
+
+        return smbclient.security.set_security_descriptor(
+            str(self.share_path),
+            sec_desc,
+        )
+
+    def get_security_descriptor_hax(self):
         tc, _ = self._tree_connect()
         _open = smbprotocol.open
         x = str(self.rel_path)
@@ -260,7 +278,7 @@ class PathWrapper:
 
         return SecurityDescriptor.load(sd)
 
-    def set_security_descriptor(self, sd):
+    def set_security_descriptor_hax(self, sd):
         tc, _ = self._tree_connect()
         _open = smbprotocol.open
         x = str(self.rel_path)
@@ -404,6 +422,22 @@ class ACE:
         )
 
     __repr__ = __str__
+
+    def numeric_str(self, label="ACE"):
+        return (
+            f"{label}:{self.sid}:"
+            f"{self.ace_type.value:#x}/"
+            f"{self.ace_flags:#x}/"
+            f"{self.mask:#010x}"
+        )
+
+    def symbolic_str(self, label="ACE"):
+        return (
+            f"{label}:{self.sid}:"
+            f"{self.ace_type.name}/"
+            f"{ShortACEFlags.joined(self.ace_flags)}/"
+            f"{AccessMask.joined(self.mask)}"
+        )
 
     def to_protocol(self):
         if self.ace_type is ACEType.ALLOW:
