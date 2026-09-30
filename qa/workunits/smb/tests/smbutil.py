@@ -236,6 +236,79 @@ def get_share_by_id(smb_cfg, cluster_id, share_id):
     return share
 
 
+class Sleeper:
+    def __init__(self, smb_cfg):
+        self.ready = True
+        raise ValueError('boo')
+
+    def wait(self):
+        time.sleep(60)
+
+
+class RemoteControlCLIPoller:
+    def __init__(self, smb_cfg):
+        self._cfg = smb_cfg
+        self.ready = False
+        self._history = []
+        self._setup()
+        self._read()
+
+    def _setup(self):
+        jres = cephutil.cephadm_shell_cmd(
+            self._cfg,
+            ['ceph', 'orch', 'ps', '--format=json'],
+            load_json=True,
+        )
+        smb_svcs = [entry for entry in jres.obj if entry['daemon_type'] == 'smb']
+        if len(smb_svcs) != 1:
+            # give up
+            return
+        self._host = smb_svcs[0]["hostname"]
+        print(self._host)
+        jres = cephutil.cephadm_shell_cmd(
+            self._cfg,
+            ['ceph', 'orch', 'host', 'ls', '--format=json'],
+            load_json=True,
+        )
+        hosts = {entry['hostname']: entry['addr'] for entry in jres.obj}
+        self._host_ip = hosts.get(self._host, '')
+        print(self._host_ip)
+        self.ready = True
+
+    def _read(self):
+        if not self.ready:
+            return
+        jres = cephutil.cephadm_shell_cmd(
+            self._cfg,
+            ['ceph-smb-ctl', 'config-summary', 'samba'],
+            load_json=True,
+            ssh_host=self._host_ip,
+        )
+        digest = jres.obj.get('digest', {}).get('config_digest', '')
+        if digest:
+            self._history.append(digest)
+        # TODO: trim history
+
+    def changed(self):
+        self._read()
+        if len(self._history) < 2:
+            return False
+        return self._history[-2] != self._history[-1]
+
+    def wait(self, max_wait=165):
+        with open('/tmp/z', 'a') as fh:
+            print('START', file=fh)
+        t = time.time()
+        while not self.changed():
+            with open('/tmp/z', 'a') as fh:
+                print('TT', self._history, file=fh)
+            time.sleep(10)
+            if time.time() - t > max_wait:
+                break
+        with open('/tmp/z', 'a') as fh:
+            print('DONE', int(time.time() - t), file=fh)
+
+
 def _apply(smb_cfg, resources, immediate=False, check=None, load_json=True):
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
