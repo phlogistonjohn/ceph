@@ -69,7 +69,7 @@ class ProcessError(subprocess.CalledProcessError):
 
 
 def cephadm_shell_cmd(
-    smb_cfg, args, load_json=None, input_json=None, **kwargs
+    smb_cfg, args, load_json=None, input_json=None, ssh_host=None, **kwargs
 ):
     """Run a command within the cephadm shell on the cluster's admin
     node (derived via smb_cfg). If `load_json` is true return the stdout
@@ -82,15 +82,20 @@ def cephadm_shell_cmd(
         kwargs['check'] = load is LoadJSON.OUTPUT
     if input_json is not None:
         kwargs['input'] = json.dumps(input_json).encode()
+    cephadm_path = (
+        smb_cfg.cephadm_custom_path
+        or f'/home/{smb_cfg.ssh_user}/cephtest/cephadm'
+    )
+    ssh_host = ssh_host or smb_cfg.ssh_admin_host
     cmd = [
         'ssh',
         '-oBatchMode=yes',
         '-oUserKnownHostsFile=/dev/null',
         '-oStrictHostKeyChecking=no',
         '-q',
-        f'{smb_cfg.ssh_user}@{smb_cfg.ssh_admin_host}',
+        f'{smb_cfg.ssh_user}@{ssh_host}',
         'sudo',
-        f'/home/{smb_cfg.ssh_user}/cephtest/cephadm',
+        cephadm_path,
         'shell',
     ]
     volumes = kwargs.pop('volumes', [])
