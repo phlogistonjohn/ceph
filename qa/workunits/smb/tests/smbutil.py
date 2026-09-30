@@ -99,6 +99,10 @@ class SMBTestConf:
     def params(self):
         return self._data.get('params') or {}
 
+    @property
+    def cephadm_custom_path(self):
+        return self._data.get('cephadm_custom_path')
+
 
 @contextlib.contextmanager
 def connection(conf, share, username=None, password=None):
