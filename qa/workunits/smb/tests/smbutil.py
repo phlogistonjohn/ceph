@@ -310,6 +310,9 @@ class RemoteControlCLIPoller:
 
 
 def _apply(smb_cfg, resources, immediate=False, check=None, load_json=True):
+    sleeper = RemoteControlCLIPoller(smb_cfg)
+    if not sleeper.ready:
+        sleeper = Sleeper(smb_cfg)
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
         ['ceph', 'smb', 'apply', '-i-'],
@@ -323,7 +326,7 @@ def _apply(smb_cfg, resources, immediate=False, check=None, load_json=True):
     # sleep to ensure the settings got applied in smbd
     # TODO: make this more dynamic somehow
     if not immediate:
-        time.sleep(60)
+        sleeper.wait()
     return ret
 
 
