@@ -1,6 +1,5 @@
 import base64
 import contextlib
-import enum
 import functools
 import os
 import pathlib
@@ -10,10 +9,6 @@ import cephutil
 
 import smbclient
 from smbprotocol.header import NtStatus
-import smbprotocol.open
-import smbprotocol.file_info
-import smbprotocol.security_descriptor
-import smbprotocol.tree
 
 
 class SMBTestHost:
@@ -113,28 +108,15 @@ def connection(conf, share, username=None, password=None):
     username = conf.username if username is None else username
     password = conf.password if password is None else password
 
-    session = smbclient.register_session(
+    smbclient.register_session(
         server=server,
         port=port,
         username=username,
         password=password,
     )
-
-    # monkey patch
-    acl_revision_cls = smbprotocol.security_descriptor.AclRevision
-    r3 = None
-    for attr in vars(acl_revision_cls):
-        if attr.startswith('_'):
-            continue
-        if getattr(acl_revision_cls, attr, None) == 3:
-            r3 = attr
-    if not r3:
-        r3 = 'ACL_REVISION_SAMBA'
-        setattr(acl_revision_cls, r3, 3)
-
     try:
         spath = pathlib.PureWindowsPath(f'//{server}/{share}')
-        yield PathWrapper(spath, session=session)
+        yield PathWrapper(spath)
     finally:
         smbclient.delete_session(server, port)
 
@@ -144,20 +126,11 @@ class PathWrapper:
     similarly to a pathlib.Path.
     """
 
-    def __init__(self, share_path, *, session, root=None):
+    def __init__(self, share_path):
         self.share_path = share_path
-        self._session = session
-        self._root = str(root if root else share_path)
-
-    def _child(self, sub):
-        return self.__class__(sub, session=self._session, root=self._root)
 
     def __truediv__(self, other):
-        return self._child(self.share_path / other)
-
-    @property
-    def rel_path(self):
-        return self.share_path.relative_to(self._root)
+        return self.__class__(self.share_path / other)
 
     def listdir(self, **kwargs):
         """List directory contents."""
