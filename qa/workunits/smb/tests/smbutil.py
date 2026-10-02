@@ -246,7 +246,6 @@ def get_share_by_id(smb_cfg, cluster_id, share_id):
 class Sleeper:
     def __init__(self, smb_cfg):
         self.ready = True
-        raise ValueError('boo')
 
     def wait(self):
         time.sleep(60)
@@ -317,9 +316,7 @@ class RemoteControlCLIPoller:
 
 
 def _apply(smb_cfg, resources, immediate=False, check=None, load_json=True):
-    sleeper = RemoteControlCLIPoller(smb_cfg)
-    if not sleeper.ready:
-        sleeper = Sleeper(smb_cfg)
+    sleeper = Sleeper(smb_cfg)
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
         ['ceph', 'smb', 'apply', '-i-'],
