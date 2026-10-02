@@ -198,6 +198,13 @@ class PathWrapper:
             sec_desc,
         )
 
+    def rmtree(self, *, ignore_errors=False):
+        import smbclient.shutil
+
+        return smbclient.shutil.rmtree(
+            str(self.share_path), ignore_errors=ignore_errors
+        )
+
 
 def _get_resources(smb_cfg, rtype):
     jres = cephutil.cephadm_shell_cmd(
